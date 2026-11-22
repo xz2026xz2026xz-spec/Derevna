@@ -5,10 +5,11 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>Деревня 3D</title>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
+  * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
   body { overflow: hidden; background-color: #1a1525; font-family: system-ui, sans-serif; }
   #canvas-container { width: 100vw; height: 100vh; display: block; }
   
+  /* Поиск */
   .search {
     position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
     width: 90%; max-width: 400px; z-index: 10; background: rgba(255,255,255,0.95);
@@ -16,8 +17,55 @@
     box-shadow: 0 6px 20px rgba(0,0,0,0.4); pointer-events: auto;
   }
   .search input { border: none; outline: none; background: transparent; font-size: 15px; width: 100%; margin-left: 8px; }
+
+  /* Кнопка админа */
+  #adminBtn {
+    position: absolute; bottom: 20px; right: 20px; z-index: 20;
+    background: #26262f; color: white; border: 1px solid #444;
+    border-radius: 50%; width: 50px; height: 50px; font-size: 24px;
+    cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    display: flex; align-items: center; justify-content: center;
+  }
+  #adminBtn.on { background: #c0392b; border-color: #e74c3c; }
+
+  /* Панель админа */
+  #adminPanel {
+    position: absolute; top: 0; right: -320px; width: 300px; height: 100%;
+    background: #1e1e28; border-left: 1px solid #333; z-index: 30;
+    padding: 20px; display: flex; flex-direction: column; gap: 12px;
+    transition: right 0.3s ease; color: white; box-shadow: -5px 0 20px rgba(0,0,0,0.5);
+  }
+  #adminPanel.open { right: 0; }
+  #adminPanel h3 { font-size: 18px; margin-bottom: 10px; }
+  #adminPanel textarea {
+    width: 100%; height: 150px; background: #101015; color: white;
+    border: 1px solid #333; border-radius: 8px; padding: 10px; font-family: monospace;
+    resize: none;
+  }
+  #adminPanel button {
+    padding: 12px; border-radius: 8px; border: none; cursor: pointer;
+    font-weight: bold; color: white; background: #27ae60; transition: 0.2s;
+  }
+  #adminPanel button:hover { background: #2ecc71; }
+  #adminPanel button.red { background: #c0392b; }
+  #adminPanel button.red:hover { background: #e74c3c; }
+  #adminPanel button.gray { background: #444; }
+  
+  /* Окно ввода пароля */
+  #loginModal {
+    position: absolute; inset: 0; background: rgba(0,0,0,0.8); z-index: 40;
+    display: none; align-items: center; justify-content: center;
+  }
+  #loginModal.show { display: flex; }
+  .login-box {
+    background: #2a2a35; padding: 25px; border-radius: 16px; color: white;
+    text-align: center; width: 90%; max-width: 300px;
+  }
+  .login-box input {
+    width: 100%; padding: 12px; margin: 15px 0; border-radius: 8px;
+    border: none; background: #101015; color: white; font-size: 16px; text-align: center;
+  }
 </style>
-<!-- Подключаем Three.js и OrbitControls -->
 <script type="importmap">
 {
   "imports": {
@@ -35,55 +83,86 @@
 </div>
 <div id="canvas-container"></div>
 
+<!-- Админка -->
+<button id="adminBtn">⚙️</button>
+
+<div id="loginModal">
+  <div class="login-box">
+    <h3>Вход для админа</h3>
+    <input type="password" id="passInput" placeholder="Пароль">
+    <button onclick="checkPass()" style="width:100%; padding:12px; border:none; border-radius:8px; background:#27ae60; color:white; font-weight:bold; cursor:pointer;">Войти</button>
+    <button onclick="closeLogin()" style="width:100%; padding:12px; border:none; border-radius:8px; background:#444; color:white; margin-top:8px; cursor:pointer;">Отмена</button>
+  </div>
+</div>
+
+<div id="adminPanel">
+  <h3>🔐 Админ-панель</h3>
+  <p style="font-size:12px; color:#aaa;">Вводи ники подписчиков (каждый с новой строки):</p>
+  <textarea id="nicksInput" placeholder="vika_pro&#10;danya_22&#10;oleg_nos"></textarea>
+  <button onclick="addHouses()">➕ Добавить дома</button>
+  <button class="red" onclick="clearAll()">🗑 Удалить все дома</button>
+  <p style="font-size:12px; color:#e74c3c; margin-top:auto;">⚠️ Клик по дому = удалить его (в режиме админа)</p>
+  <button class="gray" onclick="logout()">Выйти</button>
+</div>
+
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-// 1. Настройка сцены
+// ================= НАСТРОЙКИ =================
+const PASSWORD = 'admin';
+const N = 12;       // Размер карты (12x12)
+const SIZE = 20;    // Размер клетки
+// =============================================
+
+// 1. Сцена, Камера, Рендер
 const scene = new THREE.Scene();
-scene.background = new THREE.Color('#1a1525'); // Темный фон
-scene.fog = new THREE.Fog('#1a1525', 200, 500);
+scene.background = new THREE.Color('#2b213a'); // Ночное небо
+scene.fog = new THREE.FogExp2('#2b213a', 0.002); // Туман для глубины
 
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 1000);
-camera.position.set(150, 150, 150); // Изометрический вид
+camera.position.set(150, 180, 150); 
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Мягкие тени
 document.getElementById('canvas-container').appendChild(renderer.domElement);
 
-// 2. Управление (вращение пальцем/мышкой)
+// Управление
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true; // Плавность
+controls.enableDamping = true;
 controls.dampingFactor = 0.05;
-controls.maxPolarAngle = Math.PI / 2 - 0.1; // Не даем камере уйти под землю
+controls.maxPolarAngle = Math.PI / 2.2; // Ограничиваем наклон
 controls.minDistance = 50;
 controls.maxDistance = 400;
+controls.target.set(0, 0, 0);
 
-// 3. Освещение
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); // Общий свет
+// 2. Свет
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.4); // Общий свет (сумерки)
 scene.add(ambientLight);
 
-const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
-dirLight.position.set(100, 200, 100);
+const dirLight = new THREE.DirectionalLight(0xffeedd, 1.0); // Свет луны/солнца
+dirLight.position.set(100, 200, -100);
 dirLight.castShadow = true;
 dirLight.shadow.mapSize.width = 2048;
 dirLight.shadow.mapSize.height = 2048;
-dirLight.shadow.camera.left = -200;
-dirLight.shadow.camera.right = 200;
-dirLight.shadow.camera.top = 200;
-dirLight.shadow.camera.bottom = -200;
+dirLight.shadow.camera.left = -250;
+dirLight.shadow.camera.right = 250;
+dirLight.shadow.camera.top = 250;
+dirLight.shadow.camera.bottom = -250;
 scene.add(dirLight);
 
-// 4. Генерация карты (12x12)
-const N = 12;
-const SIZE = 20; // Размер одной клетки
-
-// Группа для всей карты
+// 3. Группы
 const mapGroup = new THREE.Group();
 scene.add(mapGroup);
+const housesGroup = new THREE.Group();
+scene.add(housesGroup);
 
-// Создаем участки и дороги
+let housesData = []; // Массив для хранения данных о домах
+let isAdmin = false;
+
+// 4. Генерация карты (Трава, Дороги, Фонари)
 for (let x = 0; x < N; x++) {
   for (let z = 0; z < N; z++) {
     // Трава
@@ -94,19 +173,27 @@ for (let x = 0; x < N; x++) {
     grass.receiveShadow = true;
     mapGroup.add(grass);
 
-    // Дороги (темные полосы)
-    const roadGeo = new THREE.PlaneGeometry(SIZE, 4);
-    const roadMat = new THREE.MeshLambertMaterial({ color: 0x2e243a });
+    // Дороги (основа)
+    const roadGeo = new THREE.PlaneGeometry(SIZE, 6);
+    const roadMat = new THREE.MeshLambertMaterial({ color: 0x1e1829 });
     
-    // Горизонтальная дорога
+    // Горизонтальная
     if (z < N - 1) {
       const roadH = new THREE.Mesh(roadGeo, roadMat);
       roadH.rotation.x = -Math.PI / 2;
       roadH.position.set(x * SIZE, 0.51, z * SIZE + SIZE/2);
       roadH.receiveShadow = true;
       mapGroup.add(roadH);
+      
+      // Разметка (пунктир)
+      for(let i = -SIZE/2 + 2; i < SIZE/2; i+= 6) {
+        const dash = new THREE.Mesh(new THREE.PlaneGeometry(3, 0.5), new THREE.MeshBasicMaterial({color: 0xffffff}));
+        dash.rotation.x = -Math.PI / 2;
+        dash.position.set(x * SIZE + i, 0.52, z * SIZE + SIZE/2);
+        mapGroup.add(dash);
+      }
     }
-    // Вертикальная дорога
+    // Вертикальная
     if (x < N - 1) {
       const roadV = new THREE.Mesh(roadGeo, roadMat);
       roadV.rotation.x = -Math.PI / 2;
@@ -114,68 +201,243 @@ for (let x = 0; x < N; x++) {
       roadV.position.set(x * SIZE + SIZE/2, 0.51, z * SIZE);
       roadV.receiveShadow = true;
       mapGroup.add(roadV);
+      
+      // Разметка (пунктир)
+      for(let i = -SIZE/2 + 2; i < SIZE/2; i+= 6) {
+        const dash = new THREE.Mesh(new THREE.PlaneGeometry(3, 0.5), new THREE.MeshBasicMaterial({color: 0xffffff}));
+        dash.rotation.x = -Math.PI / 2;
+        dash.rotation.z = Math.PI / 2;
+        dash.position.set(x * SIZE + SIZE/2, 0.52, z * SIZE + i);
+        mapGroup.add(dash);
+      }
+    }
+
+    // Фонари на перекрестках
+    if (x < N - 1 && z < N - 1) {
+      const lampGroup = new THREE.Group();
+      
+      // Столб
+      const poleGeo = new THREE.CylinderGeometry(0.5, 0.5, 15);
+      const poleMat = new THREE.MeshLambertMaterial({ color: 0x333333 });
+      const pole = new THREE.Mesh(poleGeo, poleMat);
+      pole.position.y = 7.5;
+      lampGroup.add(pole);
+
+      // Лампа (светится)
+      const bulbGeo = new THREE.SphereGeometry(1.5, 16, 16);
+      const bulbMat = new THREE.MeshBasicMaterial({ color: 0xffdd55 });
+      const bulb = new THREE.Mesh(bulbGeo, bulbMat);
+      bulb.position.y = 15;
+      lampGroup.add(bulb);
+
+      // Точечный свет от фонаря
+      const pointLight = new THREE.PointLight(0xffdd55, 1.5, 40);
+      pointLight.position.y = 15;
+      lampGroup.add(pointLight);
+
+      lampGroup.position.set(x * SIZE + SIZE/2, 0, z * SIZE + SIZE/2);
+      mapGroup.add(lampGroup);
     }
   }
 }
 
-// Функция создания красивого 3D-домика
-function createHouse(colorRoof = 0xc0392b) {
-  const house = new THREE.Group();
+// Центрируем карту
+mapGroup.position.set(-N * SIZE / 2 + SIZE / 2, 0, -N * SIZE / 2 + SIZE / 2);
+
+// 5. Создание текста над домом (Спрайт)
+function createNametag(text) {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width = 256;
+  canvas.height = 64;
+  
+  // Фон таблички
+  ctx.fillStyle = '#f5e6a3';
+  ctx.fillRect(0, 0, 256, 64);
+  
+  // Текст
+  ctx.fillStyle = '#333';
+  ctx.font = 'bold 32px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, 128, 32);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  const material = new THREE.SpriteMaterial({ map: texture, depthTest: false });
+  const sprite = new THREE.Sprite(material);
+  sprite.scale.set(16, 4, 1);
+  sprite.position.y = 18; // Высота над домом
+  return sprite;
+}
+
+// 6. Создание 3D Домика
+function createHouseObj(nickname, x, z) {
+  const houseGroup = new THREE.Group();
 
   // Стены
   const wallGeo = new THREE.BoxGeometry(10, 8, 10);
-  const wallMat = new THREE.MeshLambertMaterial({ color: 0xf0f0f0 });
+  const wallMat = new THREE.MeshLambertMaterial({ color: 0xeeeeee });
   const walls = new THREE.Mesh(wallGeo, wallMat);
   walls.position.y = 4;
   walls.castShadow = true;
   walls.receiveShadow = true;
-  house.add(walls);
+  houseGroup.add(walls);
 
-  // Крыша (пирамида)
-  const roofGeo = new THREE.ConeGeometry(8, 6, 4);
-  const roofMat = new THREE.MeshLambertMaterial({ color: colorRoof });
+  // Крыша
+  const roofGeo = new THREE.ConeGeometry(8.5, 6, 4);
+  const roofMat = new THREE.MeshLambertMaterial({ color: 0x3b3b85 });
   const roof = new THREE.Mesh(roofGeo, roofMat);
-  roof.position.y = 8 + 3; // Над стенами
-  roof.rotation.y = Math.PI / 4; // Выравниваем грани
+  roof.position.y = 11;
+  roof.rotation.y = Math.PI / 4;
   roof.castShadow = true;
-  house.add(roof);
+  houseGroup.add(roof);
 
   // Дверь
   const doorGeo = new THREE.BoxGeometry(2, 4, 0.5);
-  const doorMat = new THREE.MeshLambertMaterial({ color: 0x3b3b85 });
+  const doorMat = new THREE.MeshLambertMaterial({ color: 0x5c3a21 });
   const door = new THREE.Mesh(doorGeo, doorMat);
-  door.position.set(0, 2, 5); // На передней стене
-  house.add(door);
+  door.position.set(0, 2, 5.1);
+  houseGroup.add(door);
 
-  return house;
+  // Окна (светятся)
+  const windowMat = new THREE.MeshBasicMaterial({ color: 0xffdd88 });
+  const winGeo = new THREE.PlaneGeometry(2, 2);
+  
+  const w1 = new THREE.Mesh(winGeo, windowMat); w1.position.set(-3, 5, 5.1); houseGroup.add(w1);
+  const w2 = new THREE.Mesh(winGeo, windowMat); w2.position.set(3, 5, 5.1); houseGroup.add(w2);
+
+  // Ник
+  const tag = createNametag(nickname);
+  houseGroup.add(tag);
+
+  // Позиция
+  houseGroup.position.set(x * SIZE, 0.5, z * SIZE);
+  
+  // Данные для кликов
+  houseGroup.userData = { nickname, x, z };
+  
+  return houseGroup;
 }
 
-// Ставим тестовые дома
-const demoHouses = [
-  { x: 3, z: 3, name: "vika_pro", color: 0xc0392b },
-  { x: 5, z: 4, name: "danya_22", color: 0x2980b9 },
-  { x: 2, z: 7, name: "oleg_nos", color: 0x8e44ad }
-];
+// 7. Логика добавления/удаления
+function getFreeSpot() {
+  const occupied = new Set(housesData.map(h => `${h.x},${h.z}`));
+  for (let x = 0; x < N; x++) {
+    for (let z = 0; z < N; z++) {
+      if (!occupied.has(`${x},${z}`)) return { x, z };
+    }
+  }
+  return null; // Мест нет
+}
 
-demoHouses.forEach(h => {
-  const house = createHouse(h.color);
-  house.position.set(h.x * SIZE, 0.5, h.z * SIZE);
-  mapGroup.add(house);
+function addHouse(nickname) {
+  const spot = getFreeSpot();
+  if (!spot) return false;
+
+  const h = createHouseObj(nickname, spot.x, spot.z);
+  housesGroup.add(h);
+  housesData.push({ nickname, x: spot.x, z: spot.z, mesh: h });
+  return true;
+}
+
+function removeHouse(mesh) {
+  const idx = housesData.findIndex(h => h.mesh === mesh);
+  if (idx !== -1) {
+    housesGroup.remove(mesh);
+    housesData.splice(idx, 1);
+  }
+}
+
+// 8. Админка
+const adminBtn = document.getElementById('adminBtn');
+const adminPanel = document.getElementById('adminPanel');
+const loginModal = document.getElementById('loginModal');
+
+adminBtn.onclick = () => {
+  if (!isAdmin) {
+    loginModal.classList.add('show');
+  } else {
+    adminPanel.classList.toggle('open');
+  }
+};
+
+window.checkPass = () => {
+  const pass = document.getElementById('passInput').value;
+  if (pass === PASSWORD) {
+    isAdmin = true;
+    loginModal.classList.remove('show');
+    adminPanel.classList.add('open');
+    adminBtn.classList.add('on');
+    document.getElementById('passInput').value = '';
+  } else {
+    alert('Неверный пароль!');
+  }
+};
+
+window.closeLogin = () => loginModal.classList.remove('show');
+
+window.logout = () => {
+  isAdmin = false;
+  adminPanel.classList.remove('open');
+  adminBtn.classList.remove('on');
+};
+
+window.addHouses = () => {
+  const text = document.getElementById('nicksInput').value;
+  const nicks = text.split('\n').map(n => n.trim().replace(/^@/, '')).filter(n => n);
+  
+  let added = 0;
+  nicks.forEach(nick => {
+    if (!housesData.find(h => h.nickname === nick)) {
+      if (addHouse(nick)) added++;
+    }
+  });
+  
+  document.getElementById('nicksInput').value = '';
+  alert(`Добавлено домов: ${added}`);
+};
+
+window.clearAll = () => {
+  if(!confirm('Удалить ВСЕ дома с карты?')) return;
+  [...housesData].forEach(h => removeHouse(h.mesh));
+};
+
+// 9. Клик по домам (удаление для админа)
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  if (!isAdmin) return;
+  
+  // Переводим координаты клика в 3D
+  mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+  
+  raycaster.setFromCamera(mouse, camera);
+  const intersects = raycaster.intersectObjects(housesGroup.children, true);
+  
+  if (intersects.length > 0) {
+    // Ищем самого родителя (сам дом)
+    let obj = intersects[0].object;
+    while (obj.parent && obj.parent !== housesGroup) {
+      obj = obj.parent;
+    }
+    if (obj.parent === housesGroup) {
+      if(confirm(`Удалить дом @${obj.userData.nickname}?`)) {
+        removeHouse(obj);
+      }
+    }
+  }
 });
 
-// Центрируем камеру на карте
-mapGroup.position.set(-N * SIZE / 2 + SIZE / 2, 0, -N * SIZE / 2 + SIZE / 2);
-controls.target.set(0, 0, 0);
-
-// 5. Анимация
+// 10. Анимация
 function animate() {
   requestAnimationFrame(animate);
-  controls.update(); // Обновляет вращение
+  controls.update();
   renderer.render(scene, camera);
 }
 animate();
 
-// 6. Адаптация под размер экрана
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
