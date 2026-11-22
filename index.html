@@ -6,10 +6,9 @@
 <title>Деревня 3D</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
-  body { overflow: hidden; background-color: #1a1525; font-family: system-ui, sans-serif; }
+  body { overflow: hidden; background-color: #000; font-family: system-ui, sans-serif; }
   #canvas-container { width: 100vw; height: 100vh; display: block; }
   
-  /* Поиск */
   .search {
     position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
     width: 90%; max-width: 400px; z-index: 10; background: rgba(255,255,255,0.95);
@@ -18,7 +17,6 @@
   }
   .search input { border: none; outline: none; background: transparent; font-size: 15px; width: 100%; margin-left: 8px; }
 
-  /* Кнопка админа */
   #adminBtn {
     position: absolute; bottom: 20px; right: 20px; z-index: 20;
     background: #26262f; color: white; border: 1px solid #444;
@@ -28,7 +26,6 @@
   }
   #adminBtn.on { background: #c0392b; border-color: #e74c3c; }
 
-  /* Панель админа */
   #adminPanel {
     position: absolute; top: 0; right: -320px; width: 300px; height: 100%;
     background: #1e1e28; border-left: 1px solid #333; z-index: 30;
@@ -51,7 +48,6 @@
   #adminPanel button.red:hover { background: #e74c3c; }
   #adminPanel button.gray { background: #444; }
   
-  /* Окно ввода пароля */
   #loginModal {
     position: absolute; inset: 0; background: rgba(0,0,0,0.8); z-index: 40;
     display: none; align-items: center; justify-content: center;
@@ -79,11 +75,10 @@
 
 <div class="search">
   <span>🔍</span>
-  <input type="text" placeholder="где мой дом">
+  <input type="text" id="searchInput" placeholder="где мой дом (Enter для поиска)">
 </div>
 <div id="canvas-container"></div>
 
-<!-- Админка -->
 <button id="adminBtn">⚙️</button>
 
 <div id="loginModal">
@@ -106,95 +101,159 @@
 </div>
 
 <script type="module">
-import * as THREE from 'three';
+ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 // ================= НАСТРОЙКИ =================
 const PASSWORD = 'admin';
 const N = 12;       // Размер карты (12x12)
 const SIZE = 20;    // Размер клетки
+const DAY_CYCLE_SPEED = 0.005; // Скорость смены дня и ночи
 // =============================================
 
 // 1. Сцена, Камера, Рендер
 const scene = new THREE.Scene();
-scene.background = new THREE.Color('#2b213a'); // Ночное небо
-scene.fog = new THREE.FogExp2('#2b213a', 0.002); // Туман для глубины
-
-const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 1000);
-camera.position.set(150, 180, 150); 
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 2000);
+camera.position.set(120, 150, 120); 
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Мягкие тени
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.getElementById('canvas-container').appendChild(renderer.domElement);
 
 // Управление
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.05;
-controls.maxPolarAngle = Math.PI / 2.2; // Ограничиваем наклон
-controls.minDistance = 50;
-controls.maxDistance = 400;
+controls.maxPolarAngle = Math.PI / 2.2;
+controls.minDistance = 40;
+controls.maxDistance = 350;
 controls.target.set(0, 0, 0);
 
-// 2. Свет
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.4); // Общий свет (сумерки)
+// ================= НЕБО (Skybox) =================
+const skyGeo = new THREE.SphereGeometry(800, 32, 15);
+const skyMat = new THREE.ShaderMaterial({
+  uniforms: {
+    topColor: { value: new THREE.Color(0x0077ff) },
+    bottomColor: { value: new THREE.Color(0xffffff) },
+    offset: { value: 33 },
+    exponent: { value: 0.6 }
+  },
+  vertexShader: `
+    varying vec3 vWorldPosition;
+    void main() {
+      vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+      vWorldPosition = worldPosition.xyz;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform vec3 topColor;
+    uniform vec3 bottomColor;
+    uniform float offset;
+    uniform float exponent;
+    varying vec3 vWorldPosition;
+    void main() {
+      float h = normalize(vWorldPosition + offset).y;
+      gl_FragColor = vec4(mix(bottomColor, topColor, max(pow(max(h, 0.0), exponent), 0.0)), 1.0);
+    }
+  `,
+  side: THREE.BackSide
+});
+const sky = new THREE.Mesh(skyGeo, skyMat);
+scene.add(sky);
+
+// ================= ЗВЕЗДЫ =================
+const starsGeometry = new THREE.BufferGeometry();
+const starsCount = 1500;
+const starPositions = new Float32Array(starsCount * 3);
+for (let i = 0; i < starsCount * 3; i += 3) {
+  const r = 700;
+  const theta = Math.random() * Math.PI * 2;
+  const phi = Math.acos((Math.random() * 2) - 1);
+  starPositions[i] = r * Math.sin(phi) * Math.cos(theta);
+  starPositions[i+1] = r * Math.sin(phi) * Math.sin(theta);
+  starPositions[i+2] = r * Math.cos(phi);
+}
+starsGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+const starsMaterial = new THREE.PointsMaterial({ color: 0xffffff, size: 2, transparent: true, opacity: 0 });
+const stars = new THREE.Points(starsGeometry, starsMaterial);
+scene.add(stars);
+
+// ================= СОЛНЦЕ И ЛУНА =================
+const sunMesh = new THREE.Mesh(new THREE.SphereGeometry(20, 16, 16), new THREE.MeshBasicMaterial({ color: 0xffdd55 }));
+scene.add(sunMesh);
+const moonMesh = new THREE.Mesh(new THREE.SphereGeometry(15, 16, 16), new THREE.MeshBasicMaterial({ color: 0xccccff }));
+scene.add(moonMesh);
+
+// ================= ОБЛАКА =================
+const clouds = new THREE.Group();
+const cloudMat = new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.8 });
+for (let i = 0; i < 20; i++) {
+  const cloudGroup = new THREE.Group();
+  for (let j = 0; j < 4; j++) {
+    const p = new THREE.Mesh(new THREE.SphereGeometry(8 + Math.random() * 8, 7, 7), cloudMat);
+    p.position.set(Math.random() * 20 - 10, Math.random() * 5, Math.random() * 10 - 5);
+    cloudGroup.add(p);
+  }
+  cloudGroup.position.set((Math.random() - 0.5) * 800, 150 + Math.random() * 50, (Math.random() - 0.5) * 800);
+  clouds.add(cloudGroup);
+}
+scene.add(clouds);
+
+// ================= СВЕТ =================
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.1); 
 scene.add(ambientLight);
+const sunLight = new THREE.DirectionalLight(0xffffff, 1.0); 
+sunLight.castShadow = true;
+sunLight.shadow.mapSize.width = 1024;
+sunLight.shadow.mapSize.height = 1024;
+sunLight.shadow.camera.left = -250;
+sunLight.shadow.camera.right = 250;
+sunLight.shadow.camera.top = 250;
+sunLight.shadow.camera.bottom = -250;
+scene.add(sunLight);
 
-const dirLight = new THREE.DirectionalLight(0xffeedd, 1.0); // Свет луны/солнца
-dirLight.position.set(100, 200, -100);
-dirLight.castShadow = true;
-dirLight.shadow.mapSize.width = 2048;
-dirLight.shadow.mapSize.height = 2048;
-dirLight.shadow.camera.left = -250;
-dirLight.shadow.camera.right = 250;
-dirLight.shadow.camera.top = 250;
-dirLight.shadow.camera.bottom = -250;
-scene.add(dirLight);
-
-// 3. Группы
+// ================= ГРУППЫ =================
 const mapGroup = new THREE.Group();
 scene.add(mapGroup);
 const housesGroup = new THREE.Group();
 scene.add(housesGroup);
 
-let housesData = []; // Массив для хранения данных о домах
+let housesData = []; 
 let isAdmin = false;
+const lamps = []; 
 
-// 4. Генерация карты (Трава, Дороги, Фонари)
+// ================= ГЕНЕРАЦИЯ КАРТЫ =================
 for (let x = 0; x < N; x++) {
   for (let z = 0; z < N; z++) {
-    // Трава
-    const grassGeo = new THREE.BoxGeometry(SIZE - 2, 1, SIZE - 2);
+    const grassGeo = new THREE.BoxGeometry(SIZE - 4, 1, SIZE - 4);
     const grassMat = new THREE.MeshLambertMaterial({ color: 0x558b43 });
     const grass = new THREE.Mesh(grassGeo, grassMat);
     grass.position.set(x * SIZE, 0, z * SIZE);
     grass.receiveShadow = true;
     mapGroup.add(grass);
 
-    // Дороги (основа)
-    const roadGeo = new THREE.PlaneGeometry(SIZE, 6);
-    const roadMat = new THREE.MeshLambertMaterial({ color: 0x1e1829 });
-    
-    // Горизонтальная
     if (z < N - 1) {
+      const roadGeo = new THREE.PlaneGeometry(SIZE, 6);
+      const roadMat = new THREE.MeshLambertMaterial({ color: 0x1e1829 });
       const roadH = new THREE.Mesh(roadGeo, roadMat);
       roadH.rotation.x = -Math.PI / 2;
       roadH.position.set(x * SIZE, 0.51, z * SIZE + SIZE/2);
       roadH.receiveShadow = true;
       mapGroup.add(roadH);
       
-      // Разметка (пунктир)
-      for(let i = -SIZE/2 + 2; i < SIZE/2; i+= 6) {
+      for (let i = -SIZE/2 + 2; i < SIZE/2; i += 6) {
         const dash = new THREE.Mesh(new THREE.PlaneGeometry(3, 0.5), new THREE.MeshBasicMaterial({color: 0xffffff}));
         dash.rotation.x = -Math.PI / 2;
         dash.position.set(x * SIZE + i, 0.52, z * SIZE + SIZE/2);
         mapGroup.add(dash);
       }
     }
-    // Вертикальная
     if (x < N - 1) {
+      const roadGeo = new THREE.PlaneGeometry(SIZE, 6);
+      const roadMat = new THREE.MeshLambertMaterial({ color: 0x1e1829 });
       const roadV = new THREE.Mesh(roadGeo, roadMat);
       roadV.rotation.x = -Math.PI / 2;
       roadV.rotation.z = Math.PI / 2;
@@ -202,8 +261,7 @@ for (let x = 0; x < N; x++) {
       roadV.receiveShadow = true;
       mapGroup.add(roadV);
       
-      // Разметка (пунктир)
-      for(let i = -SIZE/2 + 2; i < SIZE/2; i+= 6) {
+      for (let i = -SIZE/2 + 2; i < SIZE/2; i += 6) {
         const dash = new THREE.Mesh(new THREE.PlaneGeometry(3, 0.5), new THREE.MeshBasicMaterial({color: 0xffffff}));
         dash.rotation.x = -Math.PI / 2;
         dash.rotation.z = Math.PI / 2;
@@ -212,114 +270,76 @@ for (let x = 0; x < N; x++) {
       }
     }
 
-    // Фонари на перекрестках
-    if (x < N - 1 && z < N - 1) {
+    if (x < N - 1 && z < N - 1 && (x + z) % 3 === 0) {
       const lampGroup = new THREE.Group();
-      
-      // Столб
-      const poleGeo = new THREE.CylinderGeometry(0.5, 0.5, 15);
-      const poleMat = new THREE.MeshLambertMaterial({ color: 0x333333 });
-      const pole = new THREE.Mesh(poleGeo, poleMat);
-      pole.position.y = 7.5;
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 12), new THREE.MeshLambertMaterial({ color: 0x333333 }));
+      pole.position.y = 6;
       lampGroup.add(pole);
 
-      // Лампа (светится)
-      const bulbGeo = new THREE.SphereGeometry(1.5, 16, 16);
-      const bulbMat = new THREE.MeshBasicMaterial({ color: 0xffdd55 });
-      const bulb = new THREE.Mesh(bulbGeo, bulbMat);
-      bulb.position.y = 15;
+      const bulbMat = new THREE.MeshBasicMaterial({ color: 0x555555 });
+      const bulb = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 8), bulbMat);
+      bulb.position.y = 12;
       lampGroup.add(bulb);
 
-      // Точечный свет от фонаря
-      const pointLight = new THREE.PointLight(0xffdd55, 1.5, 40);
-      pointLight.position.y = 15;
+      const pointLight = new THREE.PointLight(0xffdd55, 0, 30);
+      pointLight.position.y = 12;
       lampGroup.add(pointLight);
+
+      lamps.push({ bulb, light: pointLight });
 
       lampGroup.position.set(x * SIZE + SIZE/2, 0, z * SIZE + SIZE/2);
       mapGroup.add(lampGroup);
     }
   }
 }
-
-// Центрируем карту
 mapGroup.position.set(-N * SIZE / 2 + SIZE / 2, 0, -N * SIZE / 2 + SIZE / 2);
 
-// 5. Создание текста над домом (Спрайт)
+// ================= ФУНКЦИИ ДОМА =================
 function createNametag(text) {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
-  canvas.width = 256;
-  canvas.height = 64;
-  
-  // Фон таблички
+  canvas.width = 256; canvas.height = 64;
   ctx.fillStyle = '#f5e6a3';
   ctx.fillRect(0, 0, 256, 64);
-  
-  // Текст
   ctx.fillStyle = '#333';
   ctx.font = 'bold 32px sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText(text, 128, 32);
 
   const texture = new THREE.CanvasTexture(canvas);
   const material = new THREE.SpriteMaterial({ map: texture, depthTest: false });
   const sprite = new THREE.Sprite(material);
-  sprite.scale.set(16, 4, 1);
-  sprite.position.y = 18; // Высота над домом
+  sprite.scale.set(14, 3.5, 1);
+  sprite.position.y = 12;
   return sprite;
 }
 
-// 6. Создание 3D Домика
 function createHouseObj(nickname, x, z) {
   const houseGroup = new THREE.Group();
-
-  // Стены
-  const wallGeo = new THREE.BoxGeometry(10, 8, 10);
-  const wallMat = new THREE.MeshLambertMaterial({ color: 0xeeeeee });
-  const walls = new THREE.Mesh(wallGeo, wallMat);
-  walls.position.y = 4;
-  walls.castShadow = true;
-  walls.receiveShadow = true;
+  const walls = new THREE.Mesh(new THREE.BoxGeometry(6, 6, 6), new THREE.MeshLambertMaterial({ color: 0xeeeeee }));
+  walls.position.y = 3; walls.castShadow = true; walls.receiveShadow = true;
   houseGroup.add(walls);
 
-  // Крыша
-  const roofGeo = new THREE.ConeGeometry(8.5, 6, 4);
-  const roofMat = new THREE.MeshLambertMaterial({ color: 0x3b3b85 });
-  const roof = new THREE.Mesh(roofGeo, roofMat);
-  roof.position.y = 11;
-  roof.rotation.y = Math.PI / 4;
-  roof.castShadow = true;
+  const roof = new THREE.Mesh(new THREE.ConeGeometry(5, 4, 4), new THREE.MeshLambertMaterial({ color: 0x3b3b85 }));
+  roof.position.y = 8; roof.rotation.y = Math.PI / 4; roof.castShadow = true;
   houseGroup.add(roof);
 
-  // Дверь
-  const doorGeo = new THREE.BoxGeometry(2, 4, 0.5);
-  const doorMat = new THREE.MeshLambertMaterial({ color: 0x5c3a21 });
-  const door = new THREE.Mesh(doorGeo, doorMat);
-  door.position.set(0, 2, 5.1);
+  const door = new THREE.Mesh(new THREE.BoxGeometry(1.5, 3, 0.5), new THREE.MeshLambertMaterial({ color: 0x5c3a21 }));
+  door.position.set(0, 1.5, 3.1);
   houseGroup.add(door);
 
-  // Окна (светятся)
   const windowMat = new THREE.MeshBasicMaterial({ color: 0xffdd88 });
-  const winGeo = new THREE.PlaneGeometry(2, 2);
-  
-  const w1 = new THREE.Mesh(winGeo, windowMat); w1.position.set(-3, 5, 5.1); houseGroup.add(w1);
-  const w2 = new THREE.Mesh(winGeo, windowMat); w2.position.set(3, 5, 5.1); houseGroup.add(w2);
+  const winGeo = new THREE.PlaneGeometry(1.5, 1.5);
+  const w1 = new THREE.Mesh(winGeo, windowMat); w1.position.set(-2, 4, 3.1); houseGroup.add(w1);
+  const w2 = new THREE.Mesh(winGeo, windowMat); w2.position.set(2, 4, 3.1); houseGroup.add(w2);
 
-  // Ник
-  const tag = createNametag(nickname);
-  houseGroup.add(tag);
-
-  // Позиция
+  houseGroup.add(createNametag(nickname));
   houseGroup.position.set(x * SIZE, 0.5, z * SIZE);
-  
-  // Данные для кликов
   houseGroup.userData = { nickname, x, z };
   
   return houseGroup;
 }
-
-// 7. Логика добавления/удаления
+ // ================= ЛОГИКА ДОБАВЛЕНИЯ/УДАЛЕНИЯ =================
 function getFreeSpot() {
   const occupied = new Set(housesData.map(h => `${h.x},${h.z}`));
   for (let x = 0; x < N; x++) {
@@ -327,13 +347,12 @@ function getFreeSpot() {
       if (!occupied.has(`${x},${z}`)) return { x, z };
     }
   }
-  return null; // Мест нет
+  return null;
 }
 
 function addHouse(nickname) {
   const spot = getFreeSpot();
   if (!spot) return false;
-
   const h = createHouseObj(nickname, spot.x, spot.z);
   housesGroup.add(h);
   housesData.push({ nickname, x: spot.x, z: spot.z, mesh: h });
@@ -348,51 +367,52 @@ function removeHouse(mesh) {
   }
 }
 
-// 8. Админка
+// ================= ПОИСК =================
+document.getElementById('searchInput').addEventListener('keypress', function (e) {
+  if (e.key === 'Enter') {
+    const query = this.value.trim().toLowerCase().replace(/^@/, '');
+    if (!query) return;
+    const house = housesData.find(h => h.nickname.toLowerCase().includes(query));
+    if (house) {
+      controls.target.set(house.x * SIZE, 0, house.z * SIZE);
+      camera.position.set(house.x * SIZE + 40, 40, house.z * SIZE + 40);
+    } else {
+      alert('Дом с таким ником не найден!');
+    }
+  }
+});
+
+// ================= АДМИНКА =================
 const adminBtn = document.getElementById('adminBtn');
 const adminPanel = document.getElementById('adminPanel');
 const loginModal = document.getElementById('loginModal');
 
 adminBtn.onclick = () => {
-  if (!isAdmin) {
-    loginModal.classList.add('show');
-  } else {
-    adminPanel.classList.toggle('open');
-  }
+  if (!isAdmin) loginModal.classList.add('show');
+  else adminPanel.classList.toggle('open');
 };
 
 window.checkPass = () => {
-  const pass = document.getElementById('passInput').value;
-  if (pass === PASSWORD) {
-    isAdmin = true;
-    loginModal.classList.remove('show');
-    adminPanel.classList.add('open');
-    adminBtn.classList.add('on');
+  if (document.getElementById('passInput').value === PASSWORD) {
+    isAdmin = true; loginModal.classList.remove('show');
+    adminPanel.classList.add('open'); adminBtn.classList.add('on');
     document.getElementById('passInput').value = '';
-  } else {
-    alert('Неверный пароль!');
-  }
+  } else alert('Неверный пароль!');
 };
 
 window.closeLogin = () => loginModal.classList.remove('show');
 
 window.logout = () => {
-  isAdmin = false;
-  adminPanel.classList.remove('open');
-  adminBtn.classList.remove('on');
+  isAdmin = false; adminPanel.classList.remove('open'); adminBtn.classList.remove('on');
 };
 
 window.addHouses = () => {
   const text = document.getElementById('nicksInput').value;
   const nicks = text.split('\n').map(n => n.trim().replace(/^@/, '')).filter(n => n);
-  
   let added = 0;
   nicks.forEach(nick => {
-    if (!housesData.find(h => h.nickname === nick)) {
-      if (addHouse(nick)) added++;
-    }
+    if (!housesData.find(h => h.nickname === nick)) { if (addHouse(nick)) added++; }
   });
-  
   document.getElementById('nicksInput').value = '';
   alert(`Добавлено домов: ${added}`);
 };
@@ -402,42 +422,116 @@ window.clearAll = () => {
   [...housesData].forEach(h => removeHouse(h.mesh));
 };
 
-// 9. Клик по домам (удаление для админа)
+// ================= КЛИК ПО ДОМАМ =================
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
-
 renderer.domElement.addEventListener('pointerdown', (e) => {
   if (!isAdmin) return;
-  
-  // Переводим координаты клика в 3D
   mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
   mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
-  
   raycaster.setFromCamera(mouse, camera);
   const intersects = raycaster.intersectObjects(housesGroup.children, true);
-  
   if (intersects.length > 0) {
-    // Ищем самого родителя (сам дом)
     let obj = intersects[0].object;
-    while (obj.parent && obj.parent !== housesGroup) {
-      obj = obj.parent;
-    }
+    while (obj.parent && obj.parent !== housesGroup) obj = obj.parent;
     if (obj.parent === housesGroup) {
-      if(confirm(`Удалить дом @${obj.userData.nickname}?`)) {
-        removeHouse(obj);
-      }
+      if(confirm(`Удалить дом @${obj.userData.nickname}?`)) removeHouse(obj);
     }
   }
 });
 
-// 10. Анимация
+// ================= АНИМАЦИЯ И СМЕНА ДНЯ/НОЧИ =================
+const clock = new THREE.Clock();
+let timeOfDay = 0.2; // Старт утром
+
 function animate() {
   requestAnimationFrame(animate);
+  const delta = clock.getDelta();
+  
+  // Двигаем время
+  timeOfDay = (timeOfDay + delta * DAY_CYCLE_SPEED) % 1.0;
+  const angle = timeOfDay * Math.PI * 2;
+  
+  // Позиция солнца и луны
+  const dist = 400;
+  const sunX = Math.cos(angle) * dist;
+  const sunY = Math.sin(angle) * dist;
+  const sunZ = Math.sin(angle) * 100;
+  
+  sunMesh.position.set(sunX, sunY, sunZ);
+  sunLight.position.set(sunX, sunY, sunZ);
+  moonMesh.position.set(-sunX, -sunY, -sunZ);
+  
+  const sunHeight = sunY / dist; // 1 = зенит, -1 = глубокая ночь
+  
+  // Цвета неба
+  const dayTop = new THREE.Color(0x0077ff);
+  const dayBot = new THREE.Color(0xcceeff);
+  const nightTop = new THREE.Color(0x000011);
+  const nightBot = new THREE.Color(0x111122);
+  const sunsetTop = new THREE.Color(0x2b1b3d);
+  const sunsetBot = new THREE.Color(0xff7e5f);
+  
+  let currentTop = new THREE.Color();
+  let currentBot = new THREE.Color();
+
+  if (sunHeight > 0.2) {
+    currentTop.lerpColors(dayTop, sunsetTop, (1 - sunHeight) * 1.2);
+    currentBot.lerpColors(dayBot, sunsetBot, (1 - sunHeight) * 1.2);
+  } else if (sunHeight > -0.1) {
+    const t = (sunHeight + 0.1) / 0.3; 
+    currentTop.lerpColors(nightTop, sunsetTop, t);
+    currentBot.lerpColors(nightBot, sunsetBot, t);
+  } else {
+    currentTop.copy(nightTop);
+    currentBot.copy(nightBot);
+  }
+
+  skyMat.uniforms.topColor.value.copy(currentTop);
+  skyMat.uniforms.bottomColor.value.copy(currentBot);
+  
+  // Звезды
+  starsMaterial.opacity = Math.max(0, -sunHeight * 2);
+
+  // Свет (Солнце/Луна)
+  if (sunHeight > 0) {
+    sunLight.intensity = Math.min(1.2, sunHeight * 2);
+    sunLight.color.setHex(0xffeedd);
+    ambientLight.intensity = 0.4 * sunHeight;
+  } else {
+    sunLight.intensity = Math.min(0.3, -sunHeight * 0.5);
+    sunLight.color.setHex(0x6677aa);
+    ambientLight.intensity = 0.1;
+  }
+
+  // Фонари (включаются ночью)
+  const isNight = sunHeight < 0.1;
+  lamps.forEach(l => {
+    if (isNight) {
+      l.bulb.material.color.setHex(0xffdd55);
+      l.light.intensity = 1.5;
+    } else {
+      l.bulb.material.color.setHex(0x555555);
+      l.light.intensity = 0;
+    }
+  });
+
+  // Облака плывут и темнеют
+  clouds.children.forEach((cloud) => {
+    cloud.position.x += 0.1;
+    if (cloud.position.x > 400) cloud.position.x = -400;
+    cloud.children.forEach(c => {
+      c.material.color.setHex(sunHeight > 0 ? 0xffffff : 0x333344);
+    });
+  });
+
   controls.update();
   renderer.render(scene, camera);
 }
+
 animate();
 
+// ================= АДАПТАЦИЯ ПОД ЭКРАН =================
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
