@@ -18,12 +18,11 @@
   #money { color: #2ecc71; font-size: 20px; }
   #meteorTimer { font-size: 13px; color: #e74c3c; margin-top: 5px; }
   
-  /* Статус сети теперь внизу экрана, чтобы не перекрывать поиск */
   #netStatus { 
     position: absolute; top: 120px; left: 16px; z-index: 10; 
     font-size: 12px; color: #2ecc71; font-weight: bold; 
     background: rgba(0,0,0,0.5); padding: 4px 8px; border-radius: 6px;
-    max-width: 200px;
+    max-width: 250px; line-height: 1.3;
   }
 
   .search {
@@ -223,13 +222,40 @@ for (let x = 0; x < N; x++) {
 }
 mapGroup.position.set(-N * SIZE / 2 + SIZE / 2, 0, -N * SIZE / 2 + SIZE / 2);
 
+// === НОВЫЙ ЧЕЛОВЕЧЕК (С руками и ногами) ===
 const playerGroup = new THREE.Group();
-const pBody = new THREE.Mesh(new THREE.BoxGeometry(2, 6, 2), new THREE.MeshLambertMaterial({color: 0x3498db}));
-pBody.position.y = 3;
+
+const pBody = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 5, 8), new THREE.MeshLambertMaterial({color: 0x3498db}));
+pBody.position.y = 5;
+playerGroup.add(pBody);
+
 const pHead = new THREE.Mesh(new THREE.SphereGeometry(1.5, 16, 16), new THREE.MeshLambertMaterial({color: 0xffcc99}));
-pHead.position.y = 7.5;
-playerGroup.add(pBody); playerGroup.add(pHead); playerGroup.visible = false;
+pHead.position.y = 8;
+playerGroup.add(pHead);
+
+const legGeo = new THREE.CylinderGeometry(0.5, 0.5, 3, 6);
+const legMat = new THREE.MeshLambertMaterial({color: 0x2c3e50});
+const leftLeg = new THREE.Mesh(legGeo, legMat);
+leftLeg.position.set(-0.6, 1.5, 0);
+playerGroup.add(leftLeg);
+const rightLeg = new THREE.Mesh(legGeo, legMat);
+rightLeg.position.set(0.6, 1.5, 0);
+playerGroup.add(rightLeg);
+
+const armGeo = new THREE.CylinderGeometry(0.4, 0.4, 2.5, 6);
+const armMat = new THREE.MeshLambertMaterial({color: 0xffcc99});
+const leftArm = new THREE.Mesh(armGeo, armMat);
+leftArm.position.set(-1.8, 5.5, 0);
+leftArm.rotation.z = 0.3;
+playerGroup.add(leftArm);
+const rightArm = new THREE.Mesh(armGeo, armMat);
+rightArm.position.set(1.8, 5.5, 0);
+rightArm.rotation.z = -0.3;
+playerGroup.add(rightArm);
+
+playerGroup.visible = false;
 scene.add(playerGroup); 
+// =========================================
 
 function createNametag(text) {
   const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
@@ -298,7 +324,6 @@ async function loadHouses() {
   const { data, error } = await db.from('houses').select('*');
   if (error) { 
     console.error(error); 
-    // Выводим текст ошибки прямо на экран!
     document.getElementById('netStatus').innerText = '🔴 БД: ' + error.message; 
     document.getElementById('netStatus').style.color = '#e74c3c';
     return; 
@@ -340,12 +365,10 @@ walkBtn.onclick = () => {
     
     playerGroup.visible = true;
     
-    // === ИСПРАВЛЕНА КАМЕРА ===
     controls.minDistance = 15; 
     controls.maxDistance = 45; 
     controls.maxPolarAngle = Math.PI / 2.1;
     
-    // Камера смотрит на центр человечка (высота 5), а сама находится высоко (y=35) и сзади (z+30)
     controls.target.set(playerGroup.position.x, 5, playerGroup.position.z);
     camera.position.set(playerGroup.position.x, 35, playerGroup.position.z + 30);
     
@@ -383,7 +406,6 @@ function animate() {
     playerGroup.position.add(moveDelta);
     if (moveDelta.length() > 0) playerGroup.rotation.y = Math.atan2(moveDelta.x, moveDelta.z);
     
-    // Камера следует за игроком (с учетом высоты)
     controls.target.set(playerGroup.position.x, 5, playerGroup.position.z);
     camera.position.add(moveDelta); 
   }
