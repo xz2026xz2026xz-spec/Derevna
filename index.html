@@ -179,20 +179,21 @@ sunLight.shadow.camera.left = -250; sunLight.shadow.camera.right = 250;
 sunLight.shadow.camera.top = 250; sunLight.shadow.camera.bottom = -250;
 scene.add(sunLight);
 
-// ГРУППЫ
+// ГРУППЫ (ВАЖНО: housesGroup теперь ВНУТРИ mapGroup)
 const mapGroup = new THREE.Group();
 scene.add(mapGroup);
 const housesGroup = new THREE.Group();
-scene.add(housesGroup);
+mapGroup.add(housesGroup); // Вот здесь была ошибка в прошлой версии!
 
 let housesData = []; 
 let isAdmin = false;
 const lamps = []; 
 
-// ГЕНЕРАЦИЯ КАРТЫ (Исправлены размеры: трава 14x14, дорога 6)
+// ГЕНЕРАЦИЯ КАРТЫ
 for (let x = 0; x < N; x++) {
   for (let z = 0; z < N; z++) {
-    const grassGeo = new THREE.BoxGeometry(SIZE - 6, 1, SIZE - 6); // 14x14
+    // Трава (ширина 16, чтобы оставалось место для дорог)
+    const grassGeo = new THREE.BoxGeometry(SIZE - 4, 1, SIZE - 4); 
     const grassMat = new THREE.MeshLambertMaterial({ color: 0x558b43 });
     const grass = new THREE.Mesh(grassGeo, grassMat);
     grass.position.set(x * SIZE, 0, z * SIZE);
@@ -200,7 +201,8 @@ for (let x = 0; x < N; x++) {
     mapGroup.add(grass);
 
     if (z < N - 1) {
-      const roadGeo = new THREE.PlaneGeometry(SIZE, 6); // Дорога 6 в ширину
+      // Дорога (ширина 4)
+      const roadGeo = new THREE.PlaneGeometry(SIZE, 4); 
       const roadMat = new THREE.MeshLambertMaterial({ color: 0x1e1829 });
       const roadH = new THREE.Mesh(roadGeo, roadMat);
       roadH.rotation.x = -Math.PI / 2;
@@ -216,7 +218,7 @@ for (let x = 0; x < N; x++) {
       }
     }
     if (x < N - 1) {
-      const roadGeo = new THREE.PlaneGeometry(SIZE, 6);
+      const roadGeo = new THREE.PlaneGeometry(SIZE, 4);
       const roadMat = new THREE.MeshLambertMaterial({ color: 0x1e1829 });
       const roadV = new THREE.Mesh(roadGeo, roadMat);
       roadV.rotation.x = -Math.PI / 2;
@@ -234,11 +236,11 @@ for (let x = 0; x < N; x++) {
       }
     }
 
-    // ФОНАРИ (Светлые столбы)
+    // ФОНАРИ
     if (x < N - 1 && z < N - 1 && (x + z) % 3 === 0) {
       const lampGroup = new THREE.Group();
       
-      const poleMat = new THREE.MeshLambertMaterial({ color: 0x888888 }); // Светло-серый столб
+      const poleMat = new THREE.MeshLambertMaterial({ color: 0x888888 });
       const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 12), poleMat);
       pole.position.y = 6;
       lampGroup.add(pole);
@@ -259,7 +261,8 @@ for (let x = 0; x < N; x++) {
     }
   }
 }
-// Смещаем карту так, чтобы ее центр был в координате 0,0
+
+// Смещаем ВСЮ карту в центр экрана (вместе с домами)
 mapGroup.position.set(-N * SIZE / 2 + SIZE / 2, 0, -N * SIZE / 2 + SIZE / 2);
 
 // ФУНКЦИИ ДОМА
@@ -303,7 +306,7 @@ function createHouseObj(nickname, x, z) {
 
   houseGroup.add(createNametag(nickname));
   
-  // Ставим дом СТРОГО в центр травы
+  // Дом ставится ровно в центр клетки
   houseGroup.position.set(x * SIZE, 0.5, z * SIZE);
   houseGroup.userData = { nickname, x, z };
   
@@ -338,19 +341,19 @@ function removeHouse(mesh) {
   }
 }
 
-// ПОИСК (Исправлено центрирование)
+// ПОИСК (Исправлено с localToWorld)
 document.getElementById('searchInput').addEventListener('keypress', function (e) {
   if (e.key === 'Enter') {
     const query = this.value.trim().toLowerCase().replace(/^@/, '');
     if (!query) return;
     const house = housesData.find(h => h.nickname.toLowerCase().includes(query));
     if (house) {
-      // Учитываем смещение группы карты
-      const worldX = house.x * SIZE + mapGroup.position.x;
-      const worldZ = house.z * SIZE + mapGroup.position.z;
+      // Берем локальные координаты и переводим в мировые (с учетом смещения карты)
+      const worldPos = new THREE.Vector3(house.x * SIZE, 0, house.z * SIZE);
+      mapGroup.localToWorld(worldPos);
       
-      controls.target.set(worldX, 0, worldZ);
-      camera.position.set(worldX + 40, 40, worldZ + 40);
+      controls.target.set(worldPos.x, 0, worldPos.z);
+      camera.position.set(worldPos.x + 40, 40, worldPos.z + 40);
     } else {
       alert('Дом с таким ником не найден!');
     }
