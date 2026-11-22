@@ -3,111 +3,29 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>1 подписчик = 1 дом</title>
+<title>Деревня 3D</title>
 <style>
-  *{box-sizing:border-box;margin:0;padding:0;user-select:none}
-  body{background:#1a1525;font-family:system-ui,sans-serif;overflow:hidden;height:100vh;touch-action:none}
-
-  .search{position:absolute;top:16px;left:50%;transform:translateX(-50%);
-    width:92%;max-width:420px;z-index:100;background:rgba(255,255,255,.95);
-    border-radius:22px;padding:10px 16px;display:flex;align-items:center;
-    box-shadow:0 6px 20px rgba(0,0,0,.4)}
-  .search input{border:none;outline:none;background:transparent;font-size:15px;width:100%;margin-left:8px}
-  .search span{font-size:18px;opacity:.6}
-
-  .stage{height:100vh;display:flex;align-items:center;justify-content:center;
-    perspective:1200px;overflow:hidden;cursor:grab}
-  .stage:active{cursor:grabbing}
-
-  .map{display:grid;grid-template-columns:repeat(12,90px);grid-template-rows:repeat(12,90px);
-    transform-style:preserve-3d;background:#2e243a;padding:10px;border-radius:10px;
-    box-shadow:0 20px 60px rgba(0,0,0,.6);
-    /* Начальный поворот карты */
-    transform: rotateX(55deg) rotateZ(-45deg) translateY(-60px);
-    will-change: transform;}
-
-  .cell{position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center}
-
-  .grass{position:absolute;inset:6px;background:#558b43;border-radius:4px;
-    transform:translateZ(1px);box-shadow:inset 0 0 10px rgba(0,0,0,.3)}
-
-  /* Разметка */
-  .road-h,.road-v{position:absolute;opacity:.55}
-  .road-h{bottom:0;left:0;width:100%;height:2px;
-    background:repeating-linear-gradient(90deg,#fff 0 15px,transparent 15px 30px)}
-  .road-v{right:0;top:0;width:2px;height:100%;
-    background:repeating-linear-gradient(0deg,#fff 0 15px,transparent 15px 30px)}
-
-  /* Фонарики */
-  .lamp{position:absolute;width:6px;height:6px;border-radius:50%;background:#ffd700;
-    box-shadow:0 0 20px 10px rgba(255,215,0,.35);transform:translateZ(30px);
-    pointer-events:none;z-index:10}
-
-  /* ========================================= */
-  /* ИСПРАВЛЕННЫЙ 3D ДОМИК */
-  /* ========================================= */
-  .house-wrap {
-    position: absolute;
-    bottom: 20px; /* Отступ от низа участка */
-    left: 50%;
-    margin-left: -23px; /* Центрируем */
-    width: 46px;
-    /* Магия: отменяем наклон карты, чтобы дом стоял ровно к экрану */
-    transform: rotateZ(45deg) rotateX(-55deg) translateZ(10px);
-    transform-origin: bottom center;
-    transform-style: preserve-3d;
-    pointer-events: none;
-    animation: dropIn 0.3s ease-out;
-  }
-
-  @keyframes dropIn {
-    from { transform: rotateZ(45deg) rotateX(-55deg) translateZ(100px); opacity: 0; }
-    to { transform: rotateZ(45deg) rotateX(-55deg) translateZ(10px); opacity: 1; }
-  }
-
-  /* Тень от дома */
-  .house-shadow {
-    position: absolute; bottom: -5px; left: 5px; width: 40px; height: 10px;
-    background: rgba(0,0,0,0.4); border-radius: 50%; filter: blur(2px);
-    transform: rotateX(90deg); /* Кладем тень на землю */
-  }
-
-  .house {
-    width: 46px; height: 34px; background: #f0f0f0;
-    border-radius: 2px; position: relative;
-    box-shadow: inset -5px -5px 0 rgba(0,0,0,0.1);
-  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { overflow: hidden; background-color: #1a1525; font-family: system-ui, sans-serif; }
+  #canvas-container { width: 100vw; height: 100vh; display: block; }
   
-  /* Крыша */
-  .house::before {
-    content:''; position:absolute; top:-18px; left:-2px;
-    border-left:25px solid transparent; border-right:25px solid transparent;
-    border-bottom:18px solid #c0392b; border-radius:4px;
+  .search {
+    position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
+    width: 90%; max-width: 400px; z-index: 10; background: rgba(255,255,255,0.95);
+    border-radius: 22px; padding: 10px 16px; display: flex; align-items: center;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.4); pointer-events: auto;
   }
-    
-  /* Дверь */
-  .house::after {
-    content: ''; position: absolute; bottom: 0; left: 16px; width: 14px; height: 18px;
-    background: #3b3b85; border-radius: 2px 2px 0 0;
-  }
-  
-  /* Окна */
-  .window {
-    position: absolute; width: 8px; height: 8px; background: #ffd700;
-    border-radius: 1px; top: 10px;
-  }
-  .w1 { left: 8px; }
-  .w2 { right: 8px; }
-
-  /* Табличка с ником */
-  .nametag {
-    position: absolute; top: -40px; left: 50%; transform: translateX(-50%);
-    background: #f5e6a3; color: #333; font-size: 11px; font-weight: bold;
-    padding: 2px 6px; border-radius: 4px; white-space: nowrap;
-    box-shadow: 0 2px 5px rgba(0,0,0,.3); border: 1px solid #d4c47a;
-  }
-
+  .search input { border: none; outline: none; background: transparent; font-size: 15px; width: 100%; margin-left: 8px; }
 </style>
+<!-- Подключаем Three.js и OrbitControls -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
 </head>
 <body>
 
@@ -115,100 +33,154 @@
   <span>🔍</span>
   <input type="text" placeholder="где мой дом">
 </div>
+<div id="canvas-container"></div>
 
-<div class="stage" id="stage">
-  <div class="map" id="map"></div>
-</div>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-<script>
-  const N = 12;
-  const mapEl = document.getElementById('map');
-  const stage = document.getElementById('stage');
+// 1. Настройка сцены
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#1a1525'); // Темный фон
+scene.fog = new THREE.Fog('#1a1525', 200, 500);
 
-  // Демо-дома
-  const demoData = {
-    55: "vika_pro",
-    58: "danya_22",
-    70: "oleg_nos"
-  };
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 1000);
+camera.position.set(150, 150, 150); // Изометрический вид
 
-  // Генерация карты
-  for (let y = 0; y < N; y++) {
-    for (let x = 0; x < N; x++) {
-      const cell = document.createElement('div');
-      cell.className = 'cell';
-      const idx = y * N + x;
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+document.getElementById('canvas-container').appendChild(renderer.domElement);
 
-      if (x < N-1) { const rh=document.createElement('div'); rh.className='road-h'; cell.appendChild(rh); }
-      if (y < N-1) { const rv=document.createElement('div'); rv.className='road-v'; cell.appendChild(rv); }
-      if (x < N-1 && y < N-1) {
-        const l=document.createElement('div'); l.className='lamp';
-        l.style.right='-3px'; l.style.bottom='-3px'; cell.appendChild(l);
-      }
+// 2. Управление (вращение пальцем/мышкой)
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; // Плавность
+controls.dampingFactor = 0.05;
+controls.maxPolarAngle = Math.PI / 2 - 0.1; // Не даем камере уйти под землю
+controls.minDistance = 50;
+controls.maxDistance = 400;
 
-      const grass = document.createElement('div');
-      grass.className = 'grass';
+// 3. Освещение
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); // Общий свет
+scene.add(ambientLight);
 
-      if (demoData[idx]) {
-        const wrap = document.createElement('div'); wrap.className = 'house-wrap';
-        const shadow = document.createElement('div'); shadow.className = 'house-shadow';
-        const h = document.createElement('div'); h.className = 'house';
-        
-        // Добавляем окна внутрь дома
-        h.innerHTML = '<div class="window w1"></div><div class="window w2"></div>';
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+dirLight.position.set(100, 200, 100);
+dirLight.castShadow = true;
+dirLight.shadow.mapSize.width = 2048;
+dirLight.shadow.mapSize.height = 2048;
+dirLight.shadow.camera.left = -200;
+dirLight.shadow.camera.right = 200;
+dirLight.shadow.camera.top = 200;
+dirLight.shadow.camera.bottom = -200;
+scene.add(dirLight);
 
-        const t = document.createElement('div'); t.className = 'nametag';
-        t.innerText = demoData[idx];
-        
-        wrap.appendChild(shadow);
-        wrap.appendChild(h);
-        wrap.appendChild(t);
-        grass.appendChild(wrap);
-      }
+// 4. Генерация карты (12x12)
+const N = 12;
+const SIZE = 20; // Размер одной клетки
 
-      cell.appendChild(grass);
-      mapEl.appendChild(cell);
+// Группа для всей карты
+const mapGroup = new THREE.Group();
+scene.add(mapGroup);
+
+// Создаем участки и дороги
+for (let x = 0; x < N; x++) {
+  for (let z = 0; z < N; z++) {
+    // Трава
+    const grassGeo = new THREE.BoxGeometry(SIZE - 2, 1, SIZE - 2);
+    const grassMat = new THREE.MeshLambertMaterial({ color: 0x558b43 });
+    const grass = new THREE.Mesh(grassGeo, grassMat);
+    grass.position.set(x * SIZE, 0, z * SIZE);
+    grass.receiveShadow = true;
+    mapGroup.add(grass);
+
+    // Дороги (темные полосы)
+    const roadGeo = new THREE.PlaneGeometry(SIZE, 4);
+    const roadMat = new THREE.MeshLambertMaterial({ color: 0x2e243a });
+    
+    // Горизонтальная дорога
+    if (z < N - 1) {
+      const roadH = new THREE.Mesh(roadGeo, roadMat);
+      roadH.rotation.x = -Math.PI / 2;
+      roadH.position.set(x * SIZE, 0.51, z * SIZE + SIZE/2);
+      roadH.receiveShadow = true;
+      mapGroup.add(roadH);
+    }
+    // Вертикальная дорога
+    if (x < N - 1) {
+      const roadV = new THREE.Mesh(roadGeo, roadMat);
+      roadV.rotation.x = -Math.PI / 2;
+      roadV.rotation.z = Math.PI / 2;
+      roadV.position.set(x * SIZE + SIZE/2, 0.51, z * SIZE);
+      roadV.receiveShadow = true;
+      mapGroup.add(roadV);
     }
   }
+}
 
-  // ==========================================
-  // ИСПРАВЛЕННОЕ УПРАВЛЕНИЕ (Кручение)
-  // ==========================================
-  let isDragging = false;
-  let previousX = 0;
-  let rotation = -45; // Текущий угол
+// Функция создания красивого 3D-домика
+function createHouse(colorRoof = 0xc0392b) {
+  const house = new THREE.Group();
 
-  // Используем Pointer Events (работает и для мыши, и для пальца)
-  stage.addEventListener('pointerdown', (e) => {
-    isDragging = true;
-    previousX = e.clientX; // Запоминаем где нажали
-    stage.setPointerCapture(e.pointerId);
-  });
+  // Стены
+  const wallGeo = new THREE.BoxGeometry(10, 8, 10);
+  const wallMat = new THREE.MeshLambertMaterial({ color: 0xf0f0f0 });
+  const walls = new THREE.Mesh(wallGeo, wallMat);
+  walls.position.y = 4;
+  walls.castShadow = true;
+  walls.receiveShadow = true;
+  house.add(walls);
 
-  stage.addEventListener('pointermove', (e) => {
-    if (!isDragging) return;
-    
-    // Считаем, насколько сдвинулся палец
-    const deltaX = e.clientX - previousX;
-    
-    // Меняем угол (минус = крутится за пальцем, а не против)
-    rotation -= deltaX * 0.4; 
-    
-    // Применяем
-    mapEl.style.transform = `rotateX(55deg) rotateZ(${rotation}deg) translateY(-60px)`;
-    
-    // Обновляем предыдущую точку
-    previousX = e.clientX;
-  });
+  // Крыша (пирамида)
+  const roofGeo = new THREE.ConeGeometry(8, 6, 4);
+  const roofMat = new THREE.MeshLambertMaterial({ color: colorRoof });
+  const roof = new THREE.Mesh(roofGeo, roofMat);
+  roof.position.y = 8 + 3; // Над стенами
+  roof.rotation.y = Math.PI / 4; // Выравниваем грани
+  roof.castShadow = true;
+  house.add(roof);
 
-  stage.addEventListener('pointerup', (e) => {
-    isDragging = false;
-    stage.releasePointerCapture(e.pointerId);
-  });
+  // Дверь
+  const doorGeo = new THREE.BoxGeometry(2, 4, 0.5);
+  const doorMat = new THREE.MeshLambertMaterial({ color: 0x3b3b85 });
+  const door = new THREE.Mesh(doorGeo, doorMat);
+  door.position.set(0, 2, 5); // На передней стене
+  house.add(door);
 
-  stage.addEventListener('pointercancel', (e) => {
-    isDragging = false;
-  });
+  return house;
+}
+
+// Ставим тестовые дома
+const demoHouses = [
+  { x: 3, z: 3, name: "vika_pro", color: 0xc0392b },
+  { x: 5, z: 4, name: "danya_22", color: 0x2980b9 },
+  { x: 2, z: 7, name: "oleg_nos", color: 0x8e44ad }
+];
+
+demoHouses.forEach(h => {
+  const house = createHouse(h.color);
+  house.position.set(h.x * SIZE, 0.5, h.z * SIZE);
+  mapGroup.add(house);
+});
+
+// Центрируем камеру на карте
+mapGroup.position.set(-N * SIZE / 2 + SIZE / 2, 0, -N * SIZE / 2 + SIZE / 2);
+controls.target.set(0, 0, 0);
+
+// 5. Анимация
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update(); // Обновляет вращение
+  renderer.render(scene, camera);
+}
+animate();
+
+// 6. Адаптация под размер экрана
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
 </script>
 </body>
 </html>
