@@ -4,15 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>Деревня 3D - Онлайн</title>
-<!-- Подключаем Supabase -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
   body { overflow: hidden; background-color: #000; font-family: system-ui, sans-serif; }
   #canvas-container { width: 100vw; height: 100vh; display: block; }
   
+  /* Сдвинули HUD ниже, чтобы не мешал */
   #hud {
-    position: absolute; top: 16px; left: 16px; z-index: 10;
+    position: absolute; top: 70px; left: 16px; z-index: 10;
     background: rgba(0,0,0,0.6); padding: 10px 15px; border-radius: 12px;
     color: white; font-weight: bold; border: 1px solid #444;
   }
@@ -20,9 +20,10 @@
   #meteorTimer { font-size: 13px; color: #e74c3c; margin-top: 5px; }
   #netStatus { position: absolute; top: 16px; right: 16px; z-index: 10; font-size: 12px; color: #2ecc71; font-weight: bold; }
 
+  /* Поиск теперь по центру сверху, но уже */
   .search {
-    position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
-    width: 90%; max-width: 300px; z-index: 10; background: rgba(255,255,255,0.95);
+    position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+    width: 70%; max-width: 280px; z-index: 10; background: rgba(255,255,255,0.95);
     border-radius: 22px; padding: 8px 16px; display: flex; align-items: center;
     box-shadow: 0 6px 20px rgba(0,0,0,0.4);
   }
@@ -79,7 +80,7 @@
   <div id="money">$ 0</div>
   <div id="meteorTimer">☄️ До метеоритов: --:--:--</div>
 </div>
-<div id="netStatus">🟢 Подключено к серверу</div>
+<div id="netStatus">🟢 Онлайн</div>
 
 <div class="search">
   <span>🔍</span>
@@ -129,11 +130,9 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-// ================= НАСТРОЙКИ SUPABASE =================
 const SUPABASE_URL = 'https://ajslzsjdzczkjlguouxd.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_murTt1Egt-me5AZNAcht2g_3UxBef8i';
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-// ======================================================
 
 const PASSWORD = 'admin';
 const N = 12;
@@ -165,7 +164,6 @@ controls.enableDamping = true;
 controls.maxPolarAngle = Math.PI / 2.2;
 controls.target.set(0, 0, 0);
 
-// --- Небо и Свет ---
 const skyMat = new THREE.ShaderMaterial({
   uniforms: { topColor: { value: new THREE.Color(0x0077ff) }, bottomColor: { value: new THREE.Color(0xffffff) }, offset: { value: 33 }, exponent: { value: 0.6 } },
   vertexShader: `varying vec3 vWorldPosition; void main() { vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
@@ -181,7 +179,6 @@ sunLight.shadow.camera.left = -250; sunLight.shadow.camera.right = 250; sunLight
 scene.add(sunLight);
 const sunMesh = new THREE.Mesh(new THREE.SphereGeometry(20, 16, 16), new THREE.MeshBasicMaterial({ color: 0xffdd55 })); scene.add(sunMesh);
 
-// --- Карта ---
 const mapGroup = new THREE.Group(); scene.add(mapGroup);
 const housesGroup = new THREE.Group(); mapGroup.add(housesGroup);
 let housesData = []; 
@@ -228,9 +225,8 @@ pBody.position.y = 3;
 const pHead = new THREE.Mesh(new THREE.SphereGeometry(1.5, 16, 16), new THREE.MeshLambertMaterial({color: 0xffcc99}));
 pHead.position.y = 7.5;
 playerGroup.add(pBody); playerGroup.add(pHead); playerGroup.visible = false;
-mapGroup.add(playerGroup);
+scene.add(playerGroup); // Добавляем в сцену, а не в mapGroup, чтобы координаты были мировыми
 
-// --- Дома (3D) ---
 function createNametag(text) {
   const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
   canvas.width = 256; canvas.height = 64;
@@ -261,11 +257,9 @@ function applyUpgradesToHouse(mesh) {
   const h = mesh.userData;
   if (h.is_dead) { mesh.scale.set(0.1, 0.1, 0.1); return; }
   
-  // Высота
   mesh.scale.y = 1 + (h.height_level - 1) * 0.3;
   mesh.position.y = 0.5 + (h.height_level - 1) * 2;
 
-  // Щит
   const oldShield = mesh.children.find(c => c.geometry?.type === 'SphereGeometry');
   if (oldShield) mesh.remove(oldShield);
   
@@ -296,53 +290,54 @@ function removeHouseFromScene(nickname) {
   housesData = housesData.filter(h => h.nickname !== nickname);
 }
 
-// --- СИНХРОНИЗАЦИЯ С БАЗОЙ (ONLINE) ---
 async function loadHouses() {
   const { data, error } = await db.from('houses').select('*');
-  if (error) { console.error(error); return; }
-  
-  // Очищаем сцену
+  if (error) { 
+    console.error(error); 
+    document.getElementById('netStatus').innerText = '🔴 Ошибка БД'; 
+    document.getElementById('netStatus').style.color = '#e74c3c';
+    return; 
+  }
   [...housesGroup.children].forEach(m => housesGroup.remove(m));
   housesData = [];
-  
-  // Рисуем заново
   data.forEach(h => syncHouseToScene(h));
   updateUI();
 }
 
-// Слушаем изменения в реальном времени
 db.channel('public:houses')
   .on('postgres_changes', { event: '*', schema: 'public', table: 'houses' }, payload => {
-    if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-      syncHouseToScene(payload.new);
-    } else if (payload.eventType === 'DELETE') {
-      removeHouseFromScene(payload.old.nickname);
-    }
+    if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') syncHouseToScene(payload.new);
+    else if (payload.eventType === 'DELETE') removeHouseFromScene(payload.old.nickname);
     updateUI();
-  })
-  .subscribe();
-
-// Слушаем метеориты от админа
-db.channel('meteors')
-  .on('broadcast', { event: 'shower' }, payload => {
-    if (!isMeteorShower) triggerMeteorShower();
   }).subscribe();
 
-// --- Управление ---
+db.channel('meteors')
+  .on('broadcast', { event: 'shower' }, payload => { if (!isMeteorShower) triggerMeteorShower(true); })
+  .subscribe();
+
 let isWalking = false, moveForward = 0, moveRight = 0;
 const dpad = document.getElementById('dpad'), walkBtn = document.getElementById('walkBtn');
 
 walkBtn.onclick = () => {
   isWalking = !isWalking; walkBtn.classList.toggle('active', isWalking);
   if (isWalking) {
+    // Ищем дом
     const myHouse = housesData.find(h => h.nickname === myHouseNick);
-    if (myHouse && !myHouse.is_dead) playerGroup.position.set(myHouse.x * SIZE, 0, myHouse.z * SIZE + 10);
-    else playerGroup.position.set(0, 0, 0);
+    if (myHouse && !myHouse.is_dead) {
+      // Ставим человечка в мировые координаты
+      const wx = myHouse.x * SIZE + mapGroup.position.x;
+      const wz = myHouse.z * SIZE + mapGroup.position.z;
+      playerGroup.position.set(wx, 0, wz + 10); 
+    } else {
+      playerGroup.position.set(0, 0, 0);
+    }
     
     playerGroup.visible = true;
+    // Камера смотрит на игрока
     controls.minDistance = 15; controls.maxDistance = 30; controls.maxPolarAngle = Math.PI / 2.1;
     controls.target.copy(playerGroup.position);
     camera.position.set(playerGroup.position.x, 20, playerGroup.position.z + 25);
+    
     dpad.classList.add('show');
   } else {
     playerGroup.visible = false;
@@ -361,7 +356,6 @@ const setupBtn = (id, f, r) => {
 };
 setupBtn('btnUp', 1, 0); setupBtn('btnDown', -1, 0); setupBtn('btnLeft', 0, -1); setupBtn('btnRight', 0, 1);
 
-// --- Игровой цикл ---
 const clock = new THREE.Clock();
 let timeOfDay = 0.2; 
 
@@ -407,7 +401,6 @@ function animate() {
 }
 animate();
 
-// --- Метеориты и Взрывы ---
 function triggerMeteorShower(silent = false) {
   if (isMeteorShower) return;
   isMeteorShower = true; meteorShowerTimer = 10;
@@ -416,6 +409,7 @@ function triggerMeteorShower(silent = false) {
 }
 
 function spawnMeteor() {
+  // Берем мировые координаты карты
   const targetX = (Math.random() - 0.5) * (N * SIZE) + mapGroup.position.x;
   const targetZ = (Math.random() - 0.5) * (N * SIZE) + mapGroup.position.z;
   const meteor = new THREE.Mesh(new THREE.SphereGeometry(2, 8, 8), new THREE.MeshBasicMaterial({ color: 0xff4400 }));
@@ -433,6 +427,7 @@ function createExplosion(x, z) {
 
   housesData.forEach(h => {
     if (h.is_dead) return;
+    // Проверяем дистанцию до мировых координат дома
     const hX = h.x * SIZE + mapGroup.position.x, hZ = h.z * SIZE + mapGroup.position.z;
     const dist = Math.sqrt(Math.pow(x - hX, 2) + Math.pow(z - hZ, 2));
     if (dist < 8) {
@@ -442,7 +437,6 @@ function createExplosion(x, z) {
   });
 }
 
-// --- Магазин ---
 window.openShop = () => { if (!myHouseNick) return alert('Сначала админ должен добавить твой ник!'); document.getElementById('shopModal').classList.add('show'); };
 window.buyUpgrade = async (type) => {
   const house = housesData.find(h => h.nickname === myHouseNick);
@@ -461,7 +455,6 @@ window.buyUpgrade = async (type) => {
   }
 };
 
-// --- UI и Админка ---
 function updateUI() {
   document.getElementById('money').innerText = `$ ${money}`;
   document.getElementById('myHouseName').innerText = myHouseNick || 'Не выбран';
@@ -491,17 +484,25 @@ window.addHouses = async () => {
     if (!spot) break;
     occupied.add(`${spot.x},${spot.z}`);
     
-    // Отправляем в базу, остальное сделает Realtime
-    await db.from('houses').insert({ nickname: nick, x: spot.x, z: spot.z, height_level: 1, has_shield: false, is_dead: false });
+    // Отправляем и ЖДЕМ ответа
+    const { error } = await db.from('houses').insert({ nickname: nick, x: spot.x, z: spot.z, height_level: 1, has_shield: false, is_dead: false });
+    if (error) {
+      alert("Ошибка базы данных: " + error.message);
+      console.error(error);
+      return;
+    }
     added++;
   }
   document.getElementById('nicksInput').value = '';
-  alert(`Отправлено на сервер: ${added}`);
+  alert(`Успешно добавлено: ${added}`);
+  loadHouses(); // Принудительно обновляем
 };
 
 window.clearAll = async () => { 
   if(confirm('Удалить ВСЕ дома с сервера?')) {
-    await db.from('houses').delete().neq('nickname', 'nobody');
+    const { error } = await db.from('houses').delete().neq('nickname', 'nobody');
+    if (error) alert("Ошибка: " + error.message);
+    else loadHouses();
   }
 };
 
