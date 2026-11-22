@@ -101,17 +101,14 @@
 </div>
 
 <script type="module">
- import * as THREE from 'three';
+import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-// ================= НАСТРОЙКИ =================
 const PASSWORD = 'admin';
-const N = 12;       // Размер карты (12x12)
-const SIZE = 20;    // Размер клетки
-const DAY_CYCLE_SPEED = 0.005; // Скорость смены дня и ночи
-// =============================================
+const N = 12;
+const SIZE = 20;
+const DAY_CYCLE_SPEED = 0.005; 
 
-// 1. Сцена, Камера, Рендер
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 2000);
 camera.position.set(120, 150, 120); 
@@ -122,7 +119,6 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.getElementById('canvas-container').appendChild(renderer.domElement);
 
-// Управление
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.05;
@@ -131,91 +127,59 @@ controls.minDistance = 40;
 controls.maxDistance = 350;
 controls.target.set(0, 0, 0);
 
-// ================= НЕБО (Skybox) =================
+// НЕБО
 const skyGeo = new THREE.SphereGeometry(800, 32, 15);
 const skyMat = new THREE.ShaderMaterial({
-  uniforms: {
-    topColor: { value: new THREE.Color(0x0077ff) },
-    bottomColor: { value: new THREE.Color(0xffffff) },
-    offset: { value: 33 },
-    exponent: { value: 0.6 }
-  },
-  vertexShader: `
-    varying vec3 vWorldPosition;
-    void main() {
-      vec4 worldPosition = modelMatrix * vec4(position, 1.0);
-      vWorldPosition = worldPosition.xyz;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    }
-  `,
-  fragmentShader: `
-    uniform vec3 topColor;
-    uniform vec3 bottomColor;
-    uniform float offset;
-    uniform float exponent;
-    varying vec3 vWorldPosition;
-    void main() {
-      float h = normalize(vWorldPosition + offset).y;
-      gl_FragColor = vec4(mix(bottomColor, topColor, max(pow(max(h, 0.0), exponent), 0.0)), 1.0);
-    }
-  `,
+  uniforms: { topColor: { value: new THREE.Color(0x0077ff) }, bottomColor: { value: new THREE.Color(0xffffff) }, offset: { value: 33 }, exponent: { value: 0.6 } },
+  vertexShader: `varying vec3 vWorldPosition; void main() { vec4 worldPosition = modelMatrix * vec4(position, 1.0); vWorldPosition = worldPosition.xyz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: `uniform vec3 topColor; uniform vec3 bottomColor; uniform float offset; uniform float exponent; varying vec3 vWorldPosition; void main() { float h = normalize(vWorldPosition + offset).y; gl_FragColor = vec4(mix(bottomColor, topColor, max(pow(max(h, 0.0), exponent), 0.0)), 1.0); }`,
   side: THREE.BackSide
 });
-const sky = new THREE.Mesh(skyGeo, skyMat);
-scene.add(sky);
+scene.add(new THREE.Mesh(skyGeo, skyMat));
 
-// ================= ЗВЕЗДЫ =================
+// ЗВЕЗДЫ
 const starsGeometry = new THREE.BufferGeometry();
 const starsCount = 1500;
 const starPositions = new Float32Array(starsCount * 3);
 for (let i = 0; i < starsCount * 3; i += 3) {
-  const r = 700;
-  const theta = Math.random() * Math.PI * 2;
-  const phi = Math.acos((Math.random() * 2) - 1);
-  starPositions[i] = r * Math.sin(phi) * Math.cos(theta);
-  starPositions[i+1] = r * Math.sin(phi) * Math.sin(theta);
-  starPositions[i+2] = r * Math.cos(phi);
+  const r = 700; const theta = Math.random() * Math.PI * 2; const phi = Math.acos((Math.random() * 2) - 1);
+  starPositions[i] = r * Math.sin(phi) * Math.cos(theta); starPositions[i+1] = r * Math.sin(phi) * Math.sin(theta); starPositions[i+2] = r * Math.cos(phi);
 }
 starsGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
 const starsMaterial = new THREE.PointsMaterial({ color: 0xffffff, size: 2, transparent: true, opacity: 0 });
-const stars = new THREE.Points(starsGeometry, starsMaterial);
-scene.add(stars);
+scene.add(new THREE.Points(starsGeometry, starsMaterial));
 
-// ================= СОЛНЦЕ И ЛУНА =================
+// СОЛНЦЕ И ЛУНА
 const sunMesh = new THREE.Mesh(new THREE.SphereGeometry(20, 16, 16), new THREE.MeshBasicMaterial({ color: 0xffdd55 }));
 scene.add(sunMesh);
 const moonMesh = new THREE.Mesh(new THREE.SphereGeometry(15, 16, 16), new THREE.MeshBasicMaterial({ color: 0xccccff }));
 scene.add(moonMesh);
 
-// ================= ОБЛАКА =================
+// ОБЛАКА
 const clouds = new THREE.Group();
 const cloudMat = new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.8 });
 for (let i = 0; i < 20; i++) {
   const cloudGroup = new THREE.Group();
   for (let j = 0; j < 4; j++) {
     const p = new THREE.Mesh(new THREE.SphereGeometry(8 + Math.random() * 8, 7, 7), cloudMat);
-    p.position.set(Math.random() * 20 - 10, Math.random() * 5, Math.random() * 10 - 5);
-    cloudGroup.add(p);
+    p.position.set(Math.random() * 20 - 10, Math.random() * 5, Math.random() * 10 - 5); cloudGroup.add(p);
   }
   cloudGroup.position.set((Math.random() - 0.5) * 800, 150 + Math.random() * 50, (Math.random() - 0.5) * 800);
   clouds.add(cloudGroup);
 }
 scene.add(clouds);
 
-// ================= СВЕТ =================
+// СВЕТ
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.1); 
 scene.add(ambientLight);
 const sunLight = new THREE.DirectionalLight(0xffffff, 1.0); 
 sunLight.castShadow = true;
-sunLight.shadow.mapSize.width = 1024;
-sunLight.shadow.mapSize.height = 1024;
-sunLight.shadow.camera.left = -250;
-sunLight.shadow.camera.right = 250;
-sunLight.shadow.camera.top = 250;
-sunLight.shadow.camera.bottom = -250;
+sunLight.shadow.mapSize.width = 1024; sunLight.shadow.mapSize.height = 1024;
+sunLight.shadow.camera.left = -250; sunLight.shadow.camera.right = 250;
+sunLight.shadow.camera.top = 250; sunLight.shadow.camera.bottom = -250;
 scene.add(sunLight);
 
-// ================= ГРУППЫ =================
+// ГРУППЫ
 const mapGroup = new THREE.Group();
 scene.add(mapGroup);
 const housesGroup = new THREE.Group();
@@ -225,10 +189,10 @@ let housesData = [];
 let isAdmin = false;
 const lamps = []; 
 
-// ================= ГЕНЕРАЦИЯ КАРТЫ =================
+// ГЕНЕРАЦИЯ КАРТЫ (Исправлены размеры: трава 14x14, дорога 6)
 for (let x = 0; x < N; x++) {
   for (let z = 0; z < N; z++) {
-    const grassGeo = new THREE.BoxGeometry(SIZE - 4, 1, SIZE - 4);
+    const grassGeo = new THREE.BoxGeometry(SIZE - 6, 1, SIZE - 6); // 14x14
     const grassMat = new THREE.MeshLambertMaterial({ color: 0x558b43 });
     const grass = new THREE.Mesh(grassGeo, grassMat);
     grass.position.set(x * SIZE, 0, z * SIZE);
@@ -236,7 +200,7 @@ for (let x = 0; x < N; x++) {
     mapGroup.add(grass);
 
     if (z < N - 1) {
-      const roadGeo = new THREE.PlaneGeometry(SIZE, 6);
+      const roadGeo = new THREE.PlaneGeometry(SIZE, 6); // Дорога 6 в ширину
       const roadMat = new THREE.MeshLambertMaterial({ color: 0x1e1829 });
       const roadH = new THREE.Mesh(roadGeo, roadMat);
       roadH.rotation.x = -Math.PI / 2;
@@ -270,14 +234,17 @@ for (let x = 0; x < N; x++) {
       }
     }
 
+    // ФОНАРИ (Светлые столбы)
     if (x < N - 1 && z < N - 1 && (x + z) % 3 === 0) {
       const lampGroup = new THREE.Group();
-      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 12), new THREE.MeshLambertMaterial({ color: 0x333333 }));
+      
+      const poleMat = new THREE.MeshLambertMaterial({ color: 0x888888 }); // Светло-серый столб
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 12), poleMat);
       pole.position.y = 6;
       lampGroup.add(pole);
 
       const bulbMat = new THREE.MeshBasicMaterial({ color: 0x555555 });
-      const bulb = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 8), bulbMat);
+      const bulb = new THREE.Mesh(new THREE.SphereGeometry(1.2, 8, 8), bulbMat);
       bulb.position.y = 12;
       lampGroup.add(bulb);
 
@@ -292,9 +259,10 @@ for (let x = 0; x < N; x++) {
     }
   }
 }
+// Смещаем карту так, чтобы ее центр был в координате 0,0
 mapGroup.position.set(-N * SIZE / 2 + SIZE / 2, 0, -N * SIZE / 2 + SIZE / 2);
 
-// ================= ФУНКЦИИ ДОМА =================
+// ФУНКЦИИ ДОМА
 function createNametag(text) {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
@@ -334,12 +302,15 @@ function createHouseObj(nickname, x, z) {
   const w2 = new THREE.Mesh(winGeo, windowMat); w2.position.set(2, 4, 3.1); houseGroup.add(w2);
 
   houseGroup.add(createNametag(nickname));
+  
+  // Ставим дом СТРОГО в центр травы
   houseGroup.position.set(x * SIZE, 0.5, z * SIZE);
   houseGroup.userData = { nickname, x, z };
   
   return houseGroup;
 }
- // ================= ЛОГИКА ДОБАВЛЕНИЯ/УДАЛЕНИЯ =================
+
+// ЛОГИКА
 function getFreeSpot() {
   const occupied = new Set(housesData.map(h => `${h.x},${h.z}`));
   for (let x = 0; x < N; x++) {
@@ -367,22 +338,26 @@ function removeHouse(mesh) {
   }
 }
 
-// ================= ПОИСК =================
+// ПОИСК (Исправлено центрирование)
 document.getElementById('searchInput').addEventListener('keypress', function (e) {
   if (e.key === 'Enter') {
     const query = this.value.trim().toLowerCase().replace(/^@/, '');
     if (!query) return;
     const house = housesData.find(h => h.nickname.toLowerCase().includes(query));
     if (house) {
-      controls.target.set(house.x * SIZE, 0, house.z * SIZE);
-      camera.position.set(house.x * SIZE + 40, 40, house.z * SIZE + 40);
+      // Учитываем смещение группы карты
+      const worldX = house.x * SIZE + mapGroup.position.x;
+      const worldZ = house.z * SIZE + mapGroup.position.z;
+      
+      controls.target.set(worldX, 0, worldZ);
+      camera.position.set(worldX + 40, 40, worldZ + 40);
     } else {
       alert('Дом с таким ником не найден!');
     }
   }
 });
 
-// ================= АДМИНКА =================
+// АДМИНКА
 const adminBtn = document.getElementById('adminBtn');
 const adminPanel = document.getElementById('adminPanel');
 const loginModal = document.getElementById('loginModal');
@@ -399,13 +374,10 @@ window.checkPass = () => {
     document.getElementById('passInput').value = '';
   } else alert('Неверный пароль!');
 };
-
 window.closeLogin = () => loginModal.classList.remove('show');
-
 window.logout = () => {
   isAdmin = false; adminPanel.classList.remove('open'); adminBtn.classList.remove('on');
 };
-
 window.addHouses = () => {
   const text = document.getElementById('nicksInput').value;
   const nicks = text.split('\n').map(n => n.trim().replace(/^@/, '')).filter(n => n);
@@ -416,13 +388,12 @@ window.addHouses = () => {
   document.getElementById('nicksInput').value = '';
   alert(`Добавлено домов: ${added}`);
 };
-
 window.clearAll = () => {
   if(!confirm('Удалить ВСЕ дома с карты?')) return;
   [...housesData].forEach(h => removeHouse(h.mesh));
 };
 
-// ================= КЛИК ПО ДОМАМ =================
+// КЛИК ПО ДОМАМ
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 renderer.domElement.addEventListener('pointerdown', (e) => {
@@ -440,19 +411,17 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
   }
 });
 
-// ================= АНИМАЦИЯ И СМЕНА ДНЯ/НОЧИ =================
+// АНИМАЦИЯ И СМЕНА ДНЯ/НОЧИ
 const clock = new THREE.Clock();
-let timeOfDay = 0.2; // Старт утром
+let timeOfDay = 0.2; 
 
 function animate() {
   requestAnimationFrame(animate);
   const delta = clock.getDelta();
   
-  // Двигаем время
   timeOfDay = (timeOfDay + delta * DAY_CYCLE_SPEED) % 1.0;
   const angle = timeOfDay * Math.PI * 2;
   
-  // Позиция солнца и луны
   const dist = 400;
   const sunX = Math.cos(angle) * dist;
   const sunY = Math.sin(angle) * dist;
@@ -462,9 +431,8 @@ function animate() {
   sunLight.position.set(sunX, sunY, sunZ);
   moonMesh.position.set(-sunX, -sunY, -sunZ);
   
-  const sunHeight = sunY / dist; // 1 = зенит, -1 = глубокая ночь
+  const sunHeight = sunY / dist; 
   
-  // Цвета неба
   const dayTop = new THREE.Color(0x0077ff);
   const dayBot = new THREE.Color(0xcceeff);
   const nightTop = new THREE.Color(0x000011);
@@ -490,10 +458,8 @@ function animate() {
   skyMat.uniforms.topColor.value.copy(currentTop);
   skyMat.uniforms.bottomColor.value.copy(currentBot);
   
-  // Звезды
   starsMaterial.opacity = Math.max(0, -sunHeight * 2);
 
-  // Свет (Солнце/Луна)
   if (sunHeight > 0) {
     sunLight.intensity = Math.min(1.2, sunHeight * 2);
     sunLight.color.setHex(0xffeedd);
@@ -504,7 +470,6 @@ function animate() {
     ambientLight.intensity = 0.1;
   }
 
-  // Фонари (включаются ночью)
   const isNight = sunHeight < 0.1;
   lamps.forEach(l => {
     if (isNight) {
@@ -516,7 +481,6 @@ function animate() {
     }
   });
 
-  // Облака плывут и темнеют
   clouds.children.forEach((cloud) => {
     cloud.position.x += 0.1;
     if (cloud.position.x > 400) cloud.position.x = -400;
@@ -531,7 +495,6 @@ function animate() {
 
 animate();
 
-// ================= АДАПТАЦИЯ ПОД ЭКРАН =================
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
