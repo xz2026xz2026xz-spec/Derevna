@@ -2,11 +2,11 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>1 подписчик = 1 дом</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{background:#1a1525;font-family:system-ui,sans-serif;overflow:hidden;height:100vh}
+  body{background:#1a1525;font-family:system-ui,sans-serif;overflow:hidden;height:100vh;touch-action:none}
 
   .search{position:absolute;top:16px;left:50%;transform:translateX(-50%);
     width:92%;max-width:420px;z-index:100;background:rgba(255,255,255,.95);
@@ -16,18 +16,18 @@
   .search span{font-size:18px;opacity:.6}
 
   .stage{height:100vh;display:flex;align-items:center;justify-content:center;
-    perspective:1200px;overflow:hidden}
+    perspective:1200px;overflow:hidden;cursor:grab}
+  .stage:active{cursor:grabbing}
 
   .map{display:grid;grid-template-columns:repeat(12,90px);grid-template-rows:repeat(12,90px);
     transform:rotateX(55deg) rotateZ(-45deg) translateY(-60px);
     transform-style:preserve-3d;background:#2e243a;padding:10px;border-radius:10px;
-    box-shadow:0 20px 60px rgba(0,0,0,.6);transition:transform .3s}
+    box-shadow:0 20px 60px rgba(0,0,0,.6)}
 
   .cell{position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center}
 
   .grass{position:absolute;inset:6px;background:#558b43;border-radius:4px;
-    transform:translateZ(1px);box-shadow:inset 0 0 10px rgba(0,0,0,.3);
-    transition:background .2s}
+    transform:translateZ(1px);box-shadow:inset 0 0 10px rgba(0,0,0,.3)}
 
   .road-h,.road-v{position:absolute;opacity:.55}
   .road-h{bottom:0;left:0;width:100%;height:2px;
@@ -39,23 +39,32 @@
     box-shadow:0 0 20px 10px rgba(255,215,0,.35);transform:translateZ(30px);
     pointer-events:none;z-index:10}
 
-  .house{position:absolute;width:50px;height:40px;background:#e0e0e0;
-    transform:translateZ(25px);border-radius:4px;box-shadow:-8px 8px 0 #1d1d1d;
-    transition:transform .2s}
-  .house::before{content:'';position:absolute;top:-20px;left:0;width:0;height:0;
+  /* Исправленный 3D-домик */
+  .house-wrap {
+    position: absolute;
+    bottom: 15px;
+    transform: translateZ(1px) rotateZ(45deg) rotateX(-55deg);
+    transform-style: preserve-3d;
+    pointer-events: none;
+  }
+
+  .house{width:46px;height:34px;background:#f0f0f0;
+    border-radius:2px;position:relative;
+    box-shadow: -6px 6px 0 #ccc;}
+  
+  .house::before{content:'';position:absolute;top:-18px;left:-2px;width:0;height:0;
     border-left:25px solid transparent;border-right:25px solid transparent;
-    border-bottom:20px solid #3b3b85;border-radius:4px}
+    border-bottom:18px solid #c0392b; border-radius:4px;}
+    
+  .house::after { /* Дверь */
+    content: ''; position: absolute; bottom: 0; left: 15px; width: 14px; height: 18px;
+    background: #3b3b85; border-radius: 2px 2px 0 0;
+  }
 
-  .nametag{position:absolute;top:-58px;background:#f5e6a3;color:#333;font-size:11px;
-    font-weight:bold;padding:2px 6px;border-radius:4px;white-space:nowrap;
-    transform:rotateZ(45deg) rotateX(-55deg) translateZ(30px);
-    box-shadow:0 2px 5px rgba(0,0,0,.3);pointer-events:none}
-
-  .demo-house { position: absolute; width:50px; height:40px; background:#e0e0e0;
-    transform:translateZ(25px); border-radius:4px; box-shadow:-8px 8px 0 #1d1d1d; }
-  .demo-house::before { content:''; position:absolute; top:-20px; left:0; width:0; height:0;
-    border-left:25px solid transparent; border-right:25px solid transparent;
-    border-bottom:20px solid #c0392b; border-radius:4px; }
+  .nametag{position:absolute;top:-45px;left:50%;transform:translateX(-50%);
+    background:#f5e6a3;color:#333;font-size:11px;font-weight:bold;
+    padding:2px 6px;border-radius:4px;white-space:nowrap;
+    box-shadow:0 2px 5px rgba(0,0,0,.3);}
 </style>
 </head>
 <body>
@@ -65,13 +74,15 @@
   <input type="text" placeholder="где мой дом">
 </div>
 
-<div class="stage"><div class="map" id="map"></div></div>
+<div class="stage" id="stage">
+  <div class="map" id="map"></div>
+</div>
 
 <script>
   const N = 12;
   const mapEl = document.getElementById('map');
 
-  // Демо-дом для примера
+  // Демо-дома (чтобы ты увидел, как они стоят ровно)
   const demoData = {
     55: "vika_pro",
     58: "danya_22",
@@ -94,19 +105,50 @@
       const grass = document.createElement('div');
       grass.className = 'grass';
 
-      // Рисуем демо-дома, чтобы ты увидел, как это выглядит
       if (demoData[idx]) {
-        const h = document.createElement('div'); h.className='demo-house';
-        const t = document.createElement('div'); t.className='nametag';
+        const wrap = document.createElement('div'); wrap.className = 'house-wrap';
+        const h = document.createElement('div'); h.className = 'house';
+        const t = document.createElement('div'); t.className = 'nametag';
         t.innerText = demoData[idx];
-        h.appendChild(t);
-        grass.appendChild(h);
+        
+        wrap.appendChild(h);
+        wrap.appendChild(t);
+        grass.appendChild(wrap);
       }
 
       cell.appendChild(grass);
       mapEl.appendChild(cell);
     }
   }
+
+  // Скрипт для вращения карты пальцем/мышкой
+  let isDragging = false;
+  let startX = 0;
+  let currentRotate = -45;
+  const stage = document.getElementById('stage');
+
+  function startDrag(e) {
+    isDragging = true;
+    startX = e.type.includes('mouse') ? e.clientX : e.touches[0].clientX;
+  }
+
+  function moveDrag(e) {
+    if (!isDragging) return;
+    const x = e.type.includes('mouse') ? e.clientX : e.touches[0].clientX;
+    const diff = x - startX;
+    currentRotate = -45 + diff * 0.3;
+    mapEl.style.transform = `rotateX(55deg) rotateZ(${currentRotate}deg) translateY(-60px)`;
+  }
+
+  function stopDrag() { isDragging = false; }
+
+  stage.addEventListener('mousedown', startDrag);
+  window.addEventListener('mousemove', moveDrag);
+  window.addEventListener('mouseup', stopDrag);
+
+  stage.addEventListener('touchstart', startDrag, {passive: true});
+  window.addEventListener('touchmove', moveDrag, {passive: true});
+  window.addEventListener('touchend', stopDrag);
 </script>
 </body>
 </html>
