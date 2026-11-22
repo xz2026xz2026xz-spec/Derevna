@@ -3,7 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>Деревня 3D - Выживание</title>
+<title>Деревня 3D - Онлайн</title>
+<!-- Подключаем Supabase -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
   body { overflow: hidden; background-color: #000; font-family: system-ui, sans-serif; }
@@ -16,6 +18,7 @@
   }
   #money { color: #2ecc71; font-size: 20px; }
   #meteorTimer { font-size: 13px; color: #e74c3c; margin-top: 5px; }
+  #netStatus { position: absolute; top: 16px; right: 16px; z-index: 10; font-size: 12px; color: #2ecc71; font-weight: bold; }
 
   .search {
     position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
@@ -25,7 +28,6 @@
   }
   .search input { border: none; outline: none; background: transparent; font-size: 14px; width: 100%; margin-left: 8px; }
 
-  /* Кнопки */
   .btn {
     position: absolute; z-index: 20; border-radius: 50%; width: 60px; height: 60px;
     font-size: 26px; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.5);
@@ -34,13 +36,10 @@
   }
   #walkBtn { bottom: 20px; left: 20px; background: #8e44ad; border-color: #9b59b6; }
   #walkBtn.active { background: #27ae60; border-color: #2ecc71; }
-  
-  /* Магазин и Настройки теперь друг над другом */
   #shopBtn { bottom: 90px; right: 20px; background: #2980b9; border-color: #3498db; }
   #adminBtn { bottom: 20px; right: 20px; background: #26262f; }
   #adminBtn.on { background: #c0392b; border-color: #e74c3c; }
 
-  /* Джойстик */
   #dpad {
     position: absolute; bottom: 100px; left: 20px; z-index: 20;
     display: none; grid-template-columns: repeat(3, 50px); grid-template-rows: repeat(3, 50px); gap: 5px;
@@ -51,47 +50,27 @@
     border-radius: 10px; font-size: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center;
   }
   #dpad button:active { background: #27ae60; border-color: #2ecc71; }
-  #btnUp { grid-column: 2; grid-row: 1; }
-  #btnLeft { grid-column: 1; grid-row: 2; }
-  #btnDown { grid-column: 2; grid-row: 3; }
-  #btnRight { grid-column: 3; grid-row: 2; }
+  #btnUp { grid-column: 2; grid-row: 1; } #btnLeft { grid-column: 1; grid-row: 2; }
+  #btnDown { grid-column: 2; grid-row: 3; } #btnRight { grid-column: 3; grid-row: 2; }
 
-  .modal {
-    position: absolute; inset: 0; background: rgba(0,0,0,0.8); z-index: 40;
-    display: none; align-items: center; justify-content: center;
-  }
+  .modal { position: absolute; inset: 0; background: rgba(0,0,0,0.8); z-index: 40; display: none; align-items: center; justify-content: center; }
   .modal.show { display: flex; }
-  .box {
-    background: #1e1e28; padding: 25px; border-radius: 16px; color: white;
-    width: 90%; max-width: 340px; border: 1px solid #333;
-  }
+  .box { background: #1e1e28; padding: 25px; border-radius: 16px; color: white; width: 90%; max-width: 340px; border: 1px solid #333; }
   .box h3 { margin-bottom: 15px; text-align: center; }
-  .box button {
-    width: 100%; padding: 12px; margin-bottom: 10px; border-radius: 8px;
-    border: none; font-weight: bold; cursor: pointer; color: white; font-size: 15px;
-  }
-  .btn-buy { background: #27ae60; }
-  .btn-close { background: #444; }
+  .box button { width: 100%; padding: 12px; margin-bottom: 10px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; color: white; font-size: 15px; }
+  .btn-buy { background: #27ae60; } .btn-close { background: #444; }
   
   #adminPanel {
-    position: absolute; top: 0; right: -320px; width: 300px; height: 100%;
-    background: #1e1e28; border-left: 1px solid #333; z-index: 30;
-    padding: 20px; display: flex; flex-direction: column; gap: 12px;
-    transition: right 0.3s ease; color: white; box-shadow: -5px 0 20px rgba(0,0,0,0.5);
+    position: absolute; top: 0; right: -320px; width: 300px; height: 100%; background: #1e1e28; border-left: 1px solid #333; z-index: 30;
+    padding: 20px; display: flex; flex-direction: column; gap: 12px; transition: right 0.3s ease; color: white; box-shadow: -5px 0 20px rgba(0,0,0,0.5);
   }
   #adminPanel.open { right: 0; }
   #adminPanel textarea { width: 100%; height: 100px; background: #101015; color: white; border: 1px solid #333; border-radius: 8px; padding: 10px; font-family: monospace; resize: none; }
   #adminPanel button { padding: 12px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; color: white; background: #27ae60; }
-  #adminPanel button.red { background: #c0392b; }
-  #adminPanel button.gray { background: #444; }
+  #adminPanel button.red { background: #c0392b; } #adminPanel button.gray { background: #444; }
 </style>
 <script type="importmap">
-{
-  "imports": {
-    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
-  }
-}
+{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }
 </script>
 </head>
 <body>
@@ -100,6 +79,7 @@
   <div id="money">$ 0</div>
   <div id="meteorTimer">☄️ До метеоритов: --:--:--</div>
 </div>
+<div id="netStatus">🟢 Подключено к серверу</div>
 
 <div class="search">
   <span>🔍</span>
@@ -111,10 +91,7 @@
 <button class="btn" id="adminBtn">⚙️</button>
 
 <div id="dpad">
-  <button id="btnUp">⬆️</button>
-  <button id="btnLeft">⬅️</button>
-  <button id="btnDown">⬇️</button>
-  <button id="btnRight">➡️</button>
+  <button id="btnUp">⬆️</button> <button id="btnLeft">⬅️</button> <button id="btnDown">⬇️</button> <button id="btnRight">➡️</button>
 </div>
 
 <div class="modal" id="shopModal">
@@ -138,7 +115,7 @@
 
 <div id="adminPanel">
   <h3>🔐 Админ-панель</h3>
-  <p style="font-size:12px; color:#aaa;">Ники подписчиков:</p>
+  <p style="font-size:12px; color:#aaa;">Ники подписчиков (через Enter):</p>
   <textarea id="nicksInput" placeholder="Tima&#10;vika_pro"></textarea>
   <button onclick="addHouses()">➕ Добавить</button>
   <button class="red" onclick="triggerMeteor()">☄️ Вызвать метеориты</button>
@@ -151,6 +128,12 @@
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ================= НАСТРОЙКИ SUPABASE =================
+const SUPABASE_URL = 'https://ajslzsjdzczkjlguouxd.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_murTt1Egt-me5AZNAcht2g_3UxBef8i';
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+// ======================================================
 
 const PASSWORD = 'admin';
 const N = 12;
@@ -165,8 +148,7 @@ let nextMeteorRealTime = getNextMidnight();
 
 function getNextMidnight() {
   const now = new Date();
-  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0);
-  return next.getTime();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0).getTime();
 }
 
 const scene = new THREE.Scene();
@@ -197,10 +179,9 @@ const sunLight = new THREE.DirectionalLight(0xffffff, 1.0);
 sunLight.castShadow = true; sunLight.shadow.mapSize.width = 1024; sunLight.shadow.mapSize.height = 1024;
 sunLight.shadow.camera.left = -250; sunLight.shadow.camera.right = 250; sunLight.shadow.camera.top = 250; sunLight.shadow.camera.bottom = -250;
 scene.add(sunLight);
-
 const sunMesh = new THREE.Mesh(new THREE.SphereGeometry(20, 16, 16), new THREE.MeshBasicMaterial({ color: 0xffdd55 })); scene.add(sunMesh);
 
-// --- Карта и Дома ---
+// --- Карта ---
 const mapGroup = new THREE.Group(); scene.add(mapGroup);
 const housesGroup = new THREE.Group(); mapGroup.add(housesGroup);
 let housesData = []; 
@@ -240,6 +221,16 @@ for (let x = 0; x < N; x++) {
 }
 mapGroup.position.set(-N * SIZE / 2 + SIZE / 2, 0, -N * SIZE / 2 + SIZE / 2);
 
+// --- Игрок ---
+const playerGroup = new THREE.Group();
+const pBody = new THREE.Mesh(new THREE.BoxGeometry(2, 6, 2), new THREE.MeshLambertMaterial({color: 0x3498db}));
+pBody.position.y = 3;
+const pHead = new THREE.Mesh(new THREE.SphereGeometry(1.5, 16, 16), new THREE.MeshLambertMaterial({color: 0xffcc99}));
+pHead.position.y = 7.5;
+playerGroup.add(pBody); playerGroup.add(pHead); playerGroup.visible = false;
+mapGroup.add(playerGroup);
+
+// --- Дома (3D) ---
 function createNametag(text) {
   const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
   canvas.width = 256; canvas.height = 64;
@@ -252,88 +243,112 @@ function createNametag(text) {
   return sprite;
 }
 
-function createHouseObj(nickname, x, z) {
+function createHouseObj(h) {
   const houseGroup = new THREE.Group();
   const walls = new THREE.Mesh(new THREE.BoxGeometry(6, 6, 6), new THREE.MeshLambertMaterial({ color: 0xeeeeee }));
   walls.position.y = 3; walls.castShadow = true; walls.receiveShadow = true; houseGroup.add(walls);
   const roof = new THREE.Mesh(new THREE.ConeGeometry(5, 4, 4), new THREE.MeshLambertMaterial({ color: 0x3b3b85 }));
   roof.position.y = 8; roof.rotation.y = Math.PI / 4; roof.castShadow = true; houseGroup.add(roof);
-  houseGroup.add(createNametag(nickname));
-  houseGroup.position.set(x * SIZE, 0.5, z * SIZE);
-  houseGroup.userData = { nickname, x, z, isDead: false, hasShield: false, heightLevel: 1 };
+  houseGroup.add(createNametag(h.nickname));
+  
+  houseGroup.position.set(h.x * SIZE, 0.5, h.z * SIZE);
+  houseGroup.userData = h;
+  applyUpgradesToHouse(houseGroup);
   return houseGroup;
 }
 
-function addHouse(nickname) {
-  if (housesData.find(h => h.nickname === nickname)) return false;
-  const occupied = new Set(housesData.map(h => `${h.x},${h.z}`));
-  let spot = null;
-  for (let x = 0; x < N; x++) for (let z = 0; z < N; z++) if (!occupied.has(`${x},${z}`)) { spot = { x, z }; break; }
-  if (!spot) return false;
-  const h = createHouseObj(nickname, spot.x, spot.z);
-  housesGroup.add(h);
-  housesData.push({ nickname, x: spot.x, z: spot.z, mesh: h });
-  return true;
+function applyUpgradesToHouse(mesh) {
+  const h = mesh.userData;
+  if (h.is_dead) { mesh.scale.set(0.1, 0.1, 0.1); return; }
+  
+  // Высота
+  mesh.scale.y = 1 + (h.height_level - 1) * 0.3;
+  mesh.position.y = 0.5 + (h.height_level - 1) * 2;
+
+  // Щит
+  const oldShield = mesh.children.find(c => c.geometry?.type === 'SphereGeometry');
+  if (oldShield) mesh.remove(oldShield);
+  
+  if (h.has_shield) {
+    const shieldMesh = new THREE.Mesh(new THREE.SphereGeometry(8, 16, 16), new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.3, wireframe: true }));
+    shieldMesh.position.y = 5;
+    mesh.add(shieldMesh);
+  }
 }
 
-function updateUI() {
-  document.getElementById('money').innerText = `$ ${money}`;
-  document.getElementById('myHouseName').innerText = myHouseNick || 'Не выбран';
-  localStorage.setItem('gameMoney', money);
+function syncHouseToScene(h) {
+  const existing = housesGroup.children.find(m => m.userData.nickname === h.nickname);
+  if (existing) {
+    existing.userData = h;
+    applyUpgradesToHouse(existing);
+    const idx = housesData.findIndex(d => d.nickname === h.nickname);
+    if(idx !== -1) housesData[idx] = h;
+  } else {
+    const mesh = createHouseObj(h);
+    housesGroup.add(mesh);
+    housesData.push(h);
+  }
 }
 
-setInterval(() => { money += 10; updateUI(); }, 60000);
+function removeHouseFromScene(nickname) {
+  const mesh = housesGroup.children.find(m => m.userData.nickname === nickname);
+  if (mesh) housesGroup.remove(mesh);
+  housesData = housesData.filter(h => h.nickname !== nickname);
+}
 
-// --- Создание Игрока ---
-const playerGroup = new THREE.Group();
-const pBody = new THREE.Mesh(new THREE.BoxGeometry(2, 6, 2), new THREE.MeshLambertMaterial({color: 0x3498db}));
-pBody.position.y = 3;
-const pHead = new THREE.Mesh(new THREE.SphereGeometry(1.5, 16, 16), new THREE.MeshLambertMaterial({color: 0xffcc99}));
-pHead.position.y = 7.5;
-playerGroup.add(pBody);
-playerGroup.add(pHead);
-playerGroup.visible = false;
-mapGroup.add(playerGroup);
+// --- СИНХРОНИЗАЦИЯ С БАЗОЙ (ONLINE) ---
+async function loadHouses() {
+  const { data, error } = await db.from('houses').select('*');
+  if (error) { console.error(error); return; }
+  
+  // Очищаем сцену
+  [...housesGroup.children].forEach(m => housesGroup.remove(m));
+  housesData = [];
+  
+  // Рисуем заново
+  data.forEach(h => syncHouseToScene(h));
+  updateUI();
+}
+
+// Слушаем изменения в реальном времени
+db.channel('public:houses')
+  .on('postgres_changes', { event: '*', schema: 'public', table: 'houses' }, payload => {
+    if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+      syncHouseToScene(payload.new);
+    } else if (payload.eventType === 'DELETE') {
+      removeHouseFromScene(payload.old.nickname);
+    }
+    updateUI();
+  })
+  .subscribe();
+
+// Слушаем метеориты от админа
+db.channel('meteors')
+  .on('broadcast', { event: 'shower' }, payload => {
+    if (!isMeteorShower) triggerMeteorShower();
+  }).subscribe();
 
 // --- Управление ---
-let isWalking = false;
-let moveForward = 0, moveRight = 0;
-const dpad = document.getElementById('dpad');
-const walkBtn = document.getElementById('walkBtn');
+let isWalking = false, moveForward = 0, moveRight = 0;
+const dpad = document.getElementById('dpad'), walkBtn = document.getElementById('walkBtn');
 
 walkBtn.onclick = () => {
-  isWalking = !isWalking;
-  walkBtn.classList.toggle('active', isWalking);
-  
+  isWalking = !isWalking; walkBtn.classList.toggle('active', isWalking);
   if (isWalking) {
-    // Ищем дом игрока
     const myHouse = housesData.find(h => h.nickname === myHouseNick);
-    if (myHouse) {
-      // Спавнимся возле дома
-      playerGroup.position.set(myHouse.x * SIZE, 0, myHouse.z * SIZE + 10);
-    } else {
-      // Если дома нет, спавнимся в центре
-      playerGroup.position.set(0, 0, 0);
-    }
-    playerGroup.visible = true;
+    if (myHouse && !myHouse.is_dead) playerGroup.position.set(myHouse.x * SIZE, 0, myHouse.z * SIZE + 10);
+    else playerGroup.position.set(0, 0, 0);
     
-    // Камера смотрит на игрока
-    controls.minDistance = 15;
-    controls.maxDistance = 30;
-    controls.maxPolarAngle = Math.PI / 2.1;
+    playerGroup.visible = true;
+    controls.minDistance = 15; controls.maxDistance = 30; controls.maxPolarAngle = Math.PI / 2.1;
     controls.target.copy(playerGroup.position);
     camera.position.set(playerGroup.position.x, 20, playerGroup.position.z + 25);
-    
     dpad.classList.add('show');
   } else {
     playerGroup.visible = false;
-    controls.minDistance = 40;
-    controls.maxDistance = 350;
-    controls.maxPolarAngle = Math.PI / 2.2;
-    controls.target.set(0, 0, 0);
-    camera.position.set(120, 150, 120);
-    dpad.classList.remove('show');
-    moveForward = 0; moveRight = 0;
+    controls.minDistance = 40; controls.maxDistance = 350; controls.maxPolarAngle = Math.PI / 2.2;
+    controls.target.set(0, 0, 0); camera.position.set(120, 150, 120);
+    dpad.classList.remove('show'); moveForward = 0; moveRight = 0;
   }
 };
 
@@ -346,80 +361,6 @@ const setupBtn = (id, f, r) => {
 };
 setupBtn('btnUp', 1, 0); setupBtn('btnDown', -1, 0); setupBtn('btnLeft', 0, -1); setupBtn('btnRight', 0, 1);
 
-// --- Магазин ---
-window.openShop = () => {
-  if (!myHouseNick) return alert('Сначала админ должен добавить твой ник на карту!');
-  document.getElementById('shopModal').classList.add('show');
-};
-
-window.buyUpgrade = (type) => {
-  const house = housesData.find(h => h.nickname === myHouseNick);
-  if (!house) return alert('Твой дом не найден!');
-  if (house.mesh.userData.isDead) return alert('Твой дом разрушен! Попроси админа восстановить его.');
-
-  if (type === 'height') {
-    if (money < 30) return alert('Недостаточно денег!');
-    money -= 30;
-    house.mesh.userData.heightLevel++;
-    house.mesh.scale.y += 0.5;
-    house.mesh.position.y = 0.5 + (house.mesh.userData.heightLevel - 1) * 3;
-  } else if (type === 'shield') {
-    if (money < 50) return alert('Недостаточно денег!');
-    if (house.mesh.userData.hasShield) return alert('У тебя уже есть щит!');
-    money -= 50;
-    house.mesh.userData.hasShield = true;
-    const shieldMesh = new THREE.Mesh(new THREE.SphereGeometry(8, 16, 16), new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.3, wireframe: true }));
-    shieldMesh.position.y = 5;
-    house.mesh.add(shieldMesh);
-  }
-  updateUI();
-};
-
-// --- Метеориты ---
-function triggerMeteorShower() {
-  if (isMeteorShower) return;
-  isMeteorShower = true;
-  meteorShowerTimer = 10;
-  alert('☄️ ВНИМАНИЕ! МЕТЕОРИТНЫЙ ДОЖДЬ! УКРОЙТЕСЬ!');
-}
-
-function spawnMeteor() {
-  const targetX = (Math.random() - 0.5) * (N * SIZE);
-  const targetZ = (Math.random() - 0.5) * (N * SIZE);
-  const meteor = new THREE.Mesh(new THREE.SphereGeometry(2, 8, 8), new THREE.MeshBasicMaterial({ color: 0xff4400 }));
-  meteor.position.set(targetX + 50, 200, targetZ + 50);
-  scene.add(meteor);
-
-  const fallInterval = setInterval(() => {
-    meteor.position.y -= 5; meteor.position.x -= 1.2; meteor.position.z -= 1.2; meteor.rotation.x += 0.1;
-    if (meteor.position.y <= 0) {
-      clearInterval(fallInterval);
-      scene.remove(meteor);
-      createExplosion(meteor.position.x, meteor.position.z);
-    }
-  }, 16);
-}
-
-function createExplosion(x, z) {
-  const explosion = new THREE.Mesh(new THREE.SphereGeometry(5, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 0.8 }));
-  explosion.position.set(x, 2, z); scene.add(explosion);
-  setTimeout(() => scene.remove(explosion), 500);
-
-  housesData.forEach(h => {
-    if (h.mesh.userData.isDead) return;
-    const dist = Math.sqrt(Math.pow(x - h.mesh.position.x, 2) + Math.pow(z - h.mesh.position.z, 2));
-    if (dist < 8) {
-      if (h.mesh.userData.hasShield) {
-        h.mesh.userData.hasShield = false;
-        h.mesh.children = h.mesh.children.filter(c => c.geometry?.type !== 'SphereGeometry');
-      } else {
-        h.mesh.userData.isDead = true;
-        h.mesh.scale.set(0.1, 0.1, 0.1);
-      }
-    }
-  });
-}
-
 // --- Игровой цикл ---
 const clock = new THREE.Clock();
 let timeOfDay = 0.2; 
@@ -428,40 +369,21 @@ function animate() {
   requestAnimationFrame(animate);
   const delta = clock.getDelta();
   
-  // Движение игрока
   if (isWalking && (moveForward !== 0 || moveRight !== 0)) {
     const moveSpeed = 0.5;
     const forward = new THREE.Vector3(); camera.getWorldDirection(forward); forward.y = 0; forward.normalize();
     const right = new THREE.Vector3(); right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
-    
-    const moveDelta = new THREE.Vector3();
-    moveDelta.addScaledVector(forward, moveForward * moveSpeed);
-    moveDelta.addScaledVector(right, moveRight * moveSpeed);
-    
-    // Двигаем человечка
+    const moveDelta = new THREE.Vector3().addScaledVector(forward, moveForward * moveSpeed).addScaledVector(right, moveRight * moveSpeed);
     playerGroup.position.add(moveDelta);
-    
-    // Поворачиваем его в сторону движения
-    if (moveDelta.length() > 0) {
-      const targetAngle = Math.atan2(moveDelta.x, moveDelta.z);
-      playerGroup.rotation.y = targetAngle;
-    }
-    
-    // Камера следует за игроком
+    if (moveDelta.length() > 0) playerGroup.rotation.y = Math.atan2(moveDelta.x, moveDelta.z);
     controls.target.copy(playerGroup.position);
   }
 
-  // Таймер метеоритов
   if (!isMeteorShower) {
-    const now = Date.now();
-    const timeLeft = nextMeteorRealTime - now;
-    if (timeLeft <= 0) {
-      triggerMeteorShower();
-      nextMeteorRealTime = getNextMidnight();
-    } else {
-      const h = Math.floor(timeLeft / (1000 * 60 * 60));
-      const m = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
-      const s = Math.floor((timeLeft % (1000 * 60)) / 1000);
+    const timeLeft = nextMeteorRealTime - Date.now();
+    if (timeLeft <= 0) { triggerMeteorShower(true); nextMeteorRealTime = getNextMidnight(); } 
+    else {
+      const h = Math.floor(timeLeft / 3600000), m = Math.floor((timeLeft % 3600000) / 60000), s = Math.floor((timeLeft % 60000) / 1000);
       document.getElementById('meteorTimer').innerText = `☄️ До метеоритов: ${h}ч ${m}м ${s}с`;
     }
   } else {
@@ -471,58 +393,117 @@ function animate() {
     document.getElementById('meteorTimer').innerText = `☄️ ДОЖДЬ: ${Math.ceil(meteorShowerTimer)}с!`;
   }
 
-  // Время суток
   timeOfDay = (timeOfDay + delta * DAY_CYCLE_SPEED) % 1.0;
-  const angle = timeOfDay * Math.PI * 2;
-  const dist = 400;
-  const sunY = Math.sin(angle) * dist;
-  sunMesh.position.set(Math.cos(angle) * dist, sunY, Math.sin(angle) * 100);
-  sunLight.position.copy(sunMesh.position);
+  const angle = timeOfDay * Math.PI * 2, dist = 400, sunY = Math.sin(angle) * dist;
+  sunMesh.position.set(Math.cos(angle) * dist, sunY, Math.sin(angle) * 100); sunLight.position.copy(sunMesh.position);
   const sunHeight = sunY / dist; 
 
-  if (sunHeight > 0) {
-    sunLight.intensity = Math.min(1.2, sunHeight * 2); sunLight.color.setHex(0xffeedd); ambientLight.intensity = 0.4 * sunHeight;
-  } else {
-    sunLight.intensity = 0; ambientLight.intensity = 0.1;
-  }
+  if (sunHeight > 0) { sunLight.intensity = Math.min(1.2, sunHeight * 2); sunLight.color.setHex(0xffeedd); ambientLight.intensity = 0.4 * sunHeight; } 
+  else { sunLight.intensity = 0; ambientLight.intensity = 0.1; }
 
-  lamps.forEach(l => {
-    if (sunHeight < 0.1) { l.bulb.material.color.setHex(0xffdd55); l.light.intensity = 1.5; } 
-    else { l.bulb.material.color.setHex(0x555555); l.light.intensity = 0; }
-  });
+  lamps.forEach(l => { if (sunHeight < 0.1) { l.bulb.material.color.setHex(0xffdd55); l.light.intensity = 1.5; } else { l.bulb.material.color.setHex(0x555555); l.light.intensity = 0; } });
 
-  controls.update();
-  renderer.render(scene, camera);
+  controls.update(); renderer.render(scene, camera);
 }
 animate();
 
-// --- Привязка кнопок UI (Исправлено) ---
-document.getElementById('shopBtn').onclick = () => { window.openShop(); };
-document.getElementById('adminBtn').onclick = () => { 
-  if (!isAdmin) document.getElementById('loginModal').classList.add('show'); 
-  else document.getElementById('adminPanel').classList.toggle('open'); 
+// --- Метеориты и Взрывы ---
+function triggerMeteorShower(silent = false) {
+  if (isMeteorShower) return;
+  isMeteorShower = true; meteorShowerTimer = 10;
+  if (!silent) alert('☄️ ВНИМАНИЕ! МЕТЕОРИТНЫЙ ДОЖДЬ! УКРОЙТЕСЬ!');
+  db.channel('meteors').send({ type: 'broadcast', event: 'shower', payload: {} });
+}
+
+function spawnMeteor() {
+  const targetX = (Math.random() - 0.5) * (N * SIZE) + mapGroup.position.x;
+  const targetZ = (Math.random() - 0.5) * (N * SIZE) + mapGroup.position.z;
+  const meteor = new THREE.Mesh(new THREE.SphereGeometry(2, 8, 8), new THREE.MeshBasicMaterial({ color: 0xff4400 }));
+  meteor.position.set(targetX + 50, 200, targetZ + 50); scene.add(meteor);
+  const fallInterval = setInterval(() => {
+    meteor.position.y -= 5; meteor.position.x -= 1.2; meteor.position.z -= 1.2; meteor.rotation.x += 0.1;
+    if (meteor.position.y <= 0) { clearInterval(fallInterval); scene.remove(meteor); createExplosion(meteor.position.x, meteor.position.z); }
+  }, 16);
+}
+
+function createExplosion(x, z) {
+  const explosion = new THREE.Mesh(new THREE.SphereGeometry(5, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 0.8 }));
+  explosion.position.set(x, 2, z); scene.add(explosion);
+  setTimeout(() => scene.remove(explosion), 500);
+
+  housesData.forEach(h => {
+    if (h.is_dead) return;
+    const hX = h.x * SIZE + mapGroup.position.x, hZ = h.z * SIZE + mapGroup.position.z;
+    const dist = Math.sqrt(Math.pow(x - hX, 2) + Math.pow(z - hZ, 2));
+    if (dist < 8) {
+      if (h.has_shield) db.from('houses').update({ has_shield: false }).eq('nickname', h.nickname).then();
+      else db.from('houses').update({ is_dead: true }).eq('nickname', h.nickname).then();
+    }
+  });
+}
+
+// --- Магазин ---
+window.openShop = () => { if (!myHouseNick) return alert('Сначала админ должен добавить твой ник!'); document.getElementById('shopModal').classList.add('show'); };
+window.buyUpgrade = async (type) => {
+  const house = housesData.find(h => h.nickname === myHouseNick);
+  if (!house) return alert('Твой дом не найден!');
+  if (house.is_dead) return alert('Твой дом разрушен! Попроси админа восстановить его.');
+
+  if (type === 'height') {
+    if (money < 30) return alert('Недостаточно денег!');
+    money -= 30; updateUI();
+    await db.from('houses').update({ height_level: house.height_level + 1 }).eq('nickname', myHouseNick);
+  } else if (type === 'shield') {
+    if (money < 50) return alert('Недостаточно денег!');
+    if (house.has_shield) return alert('У тебя уже есть щит!');
+    money -= 50; updateUI();
+    await db.from('houses').update({ has_shield: true }).eq('nickname', myHouseNick);
+  }
 };
 
+// --- UI и Админка ---
+function updateUI() {
+  document.getElementById('money').innerText = `$ ${money}`;
+  document.getElementById('myHouseName').innerText = myHouseNick || 'Не выбран';
+  localStorage.setItem('gameMoney', money);
+}
+setInterval(() => { money += 10; updateUI(); }, 60000);
+
+document.getElementById('shopBtn').onclick = openShop;
+document.getElementById('adminBtn').onclick = () => { if (!isAdmin) document.getElementById('loginModal').classList.add('show'); else document.getElementById('adminPanel').classList.toggle('open'); };
 window.closeModal = (id) => document.getElementById(id).classList.remove('show');
 window.checkPass = () => {
-  if (document.getElementById('passInput').value === PASSWORD) {
-    isAdmin = true; closeModal('loginModal'); document.getElementById('adminPanel').classList.add('open'); document.getElementById('adminBtn').classList.add('on');
-  } else alert('Неверный пароль!');
+  if (document.getElementById('passInput').value === PASSWORD) { isAdmin = true; closeModal('loginModal'); document.getElementById('adminPanel').classList.add('open'); document.getElementById('adminBtn').classList.add('on'); } 
+  else alert('Неверный пароль!');
 };
-window.logout = () => {
-  isAdmin = false; document.getElementById('adminPanel').classList.remove('open'); document.getElementById('adminBtn').classList.remove('on');
-};
-window.addHouses = () => {
-  const text = document.getElementById('nicksInput').value;
-  const nicks = text.split('\n').map(n => n.trim().replace(/^@/, '')).filter(n => n);
+window.logout = () => { isAdmin = false; document.getElementById('adminPanel').classList.remove('open'); document.getElementById('adminBtn').classList.remove('on'); };
+window.triggerMeteor = () => triggerMeteorShower(false);
+
+window.addHouses = async () => {
+  const nicks = document.getElementById('nicksInput').value.split('\n').map(n => n.trim().replace(/^@/, '')).filter(n => n);
   let added = 0;
-  nicks.forEach(nick => { if (addHouse(nick)) added++; });
+  const occupied = new Set(housesData.map(h => `${h.x},${h.z}`));
+  
+  for (const nick of nicks) {
+    if (housesData.find(h => h.nickname === nick)) continue;
+    let spot = null;
+    for (let x = 0; x < N; x++) for (let z = 0; z < N; z++) if (!occupied.has(`${x},${z}`)) { spot = { x, z }; break; }
+    if (!spot) break;
+    occupied.add(`${spot.x},${spot.z}`);
+    
+    // Отправляем в базу, остальное сделает Realtime
+    await db.from('houses').insert({ nickname: nick, x: spot.x, z: spot.z, height_level: 1, has_shield: false, is_dead: false });
+    added++;
+  }
   document.getElementById('nicksInput').value = '';
-  alert(`Добавлено: ${added}`);
-  if (nicks.includes(myHouseNick)) updateUI();
+  alert(`Отправлено на сервер: ${added}`);
 };
-window.clearAll = () => { if(confirm('Удалить ВСЕ?')) { [...housesData].forEach(h => housesGroup.remove(h.mesh)); housesData = []; } };
-window.triggerMeteor = () => triggerMeteorShower();
+
+window.clearAll = async () => { 
+  if(confirm('Удалить ВСЕ дома с сервера?')) {
+    await db.from('houses').delete().neq('nickname', 'nobody');
+  }
+};
 
 setTimeout(() => {
   let savedName = localStorage.getItem('myHouseNick');
@@ -530,7 +511,7 @@ setTimeout(() => {
     let name = prompt('Введи свой ник в TikTok (чтобы играть за свой дом):');
     if (name) { localStorage.setItem('myHouseNick', name.replace(/^@/, '')); myHouseNick = name.replace(/^@/, ''); }
   }
-  updateUI();
+  updateUI(); loadHouses();
 }, 1000);
 
 document.getElementById('searchInput').addEventListener('keypress', function (e) {
