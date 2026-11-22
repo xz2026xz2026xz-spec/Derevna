@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>1 подписчик = 1 дом</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#1a1525;font-family:system-ui,sans-serif;overflow:hidden;height:100vh}
+
+  .search{position:absolute;top:16px;left:50%;transform:translateX(-50%);
+    width:92%;max-width:420px;z-index:100;background:rgba(255,255,255,.95);
+    border-radius:22px;padding:10px 16px;display:flex;align-items:center;
+    box-shadow:0 6px 20px rgba(0,0,0,.4)}
+  .search input{border:none;outline:none;background:transparent;font-size:15px;width:100%;margin-left:8px}
+  .search span{font-size:18px;opacity:.6}
+
+  .stage{height:100vh;display:flex;align-items:center;justify-content:center;
+    perspective:1200px;overflow:hidden}
+
+  .map{display:grid;grid-template-columns:repeat(12,90px);grid-template-rows:repeat(12,90px);
+    transform:rotateX(55deg) rotateZ(-45deg) translateY(-60px);
+    transform-style:preserve-3d;background:#2e243a;padding:10px;border-radius:10px;
+    box-shadow:0 20px 60px rgba(0,0,0,.6);transition:transform .3s}
+
+  .cell{position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center}
+
+  .grass{position:absolute;inset:6px;background:#558b43;border-radius:4px;
+    transform:translateZ(1px);box-shadow:inset 0 0 10px rgba(0,0,0,.3);
+    transition:background .2s}
+
+  .road-h,.road-v{position:absolute;opacity:.55}
+  .road-h{bottom:0;left:0;width:100%;height:2px;
+    background:repeating-linear-gradient(90deg,#fff 0 15px,transparent 15px 30px)}
+  .road-v{right:0;top:0;width:2px;height:100%;
+    background:repeating-linear-gradient(0deg,#fff 0 15px,transparent 15px 30px)}
+
+  .lamp{position:absolute;width:6px;height:6px;border-radius:50%;background:#ffd700;
+    box-shadow:0 0 20px 10px rgba(255,215,0,.35);transform:translateZ(30px);
+    pointer-events:none;z-index:10}
+
+  .house{position:absolute;width:50px;height:40px;background:#e0e0e0;
+    transform:translateZ(25px);border-radius:4px;box-shadow:-8px 8px 0 #1d1d1d;
+    transition:transform .2s}
+  .house::before{content:'';position:absolute;top:-20px;left:0;width:0;height:0;
+    border-left:25px solid transparent;border-right:25px solid transparent;
+    border-bottom:20px solid #3b3b85;border-radius:4px}
+
+  .nametag{position:absolute;top:-58px;background:#f5e6a3;color:#333;font-size:11px;
+    font-weight:bold;padding:2px 6px;border-radius:4px;white-space:nowrap;
+    transform:rotateZ(45deg) rotateX(-55deg) translateZ(30px);
+    box-shadow:0 2px 5px rgba(0,0,0,.3);pointer-events:none}
+
+  .demo-house { position: absolute; width:50px; height:40px; background:#e0e0e0;
+    transform:translateZ(25px); border-radius:4px; box-shadow:-8px 8px 0 #1d1d1d; }
+  .demo-house::before { content:''; position:absolute; top:-20px; left:0; width:0; height:0;
+    border-left:25px solid transparent; border-right:25px solid transparent;
+    border-bottom:20px solid #c0392b; border-radius:4px; }
+</style>
+</head>
+<body>
+
+<div class="search">
+  <span>🔍</span>
+  <input type="text" placeholder="где мой дом">
+</div>
+
+<div class="stage"><div class="map" id="map"></div></div>
+
+<script>
+  const N = 12;
+  const mapEl = document.getElementById('map');
+
+  // Демо-дом для примера
+  const demoData = {
+    55: "vika_pro",
+    58: "danya_22",
+    70: "oleg_nos"
+  };
+
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      const idx = y * N + x;
+
+      if (x < N-1) { const rh=document.createElement('div'); rh.className='road-h'; cell.appendChild(rh); }
+      if (y < N-1) { const rv=document.createElement('div'); rv.className='road-v'; cell.appendChild(rv); }
+      if (x < N-1 && y < N-1) {
+        const l=document.createElement('div'); l.className='lamp';
+        l.style.right='-3px'; l.style.bottom='-3px'; cell.appendChild(l);
+      }
+
+      const grass = document.createElement('div');
+      grass.className = 'grass';
+
+      // Рисуем демо-дома, чтобы ты увидел, как это выглядит
+      if (demoData[idx]) {
+        const h = document.createElement('div'); h.className='demo-house';
+        const t = document.createElement('div'); t.className='nametag';
+        t.innerText = demoData[idx];
+        h.appendChild(t);
+        grass.appendChild(h);
+      }
+
+      cell.appendChild(grass);
+      mapEl.appendChild(cell);
+    }
+  }
+</script>
+</body>
+</html>
