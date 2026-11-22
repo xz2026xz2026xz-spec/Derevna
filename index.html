@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>1 подписчик = 1 дом</title>
 <style>
-  *{box-sizing:border-box;margin:0;padding:0}
+  *{box-sizing:border-box;margin:0;padding:0;user-select:none}
   body{background:#1a1525;font-family:system-ui,sans-serif;overflow:hidden;height:100vh;touch-action:none}
 
   .search{position:absolute;top:16px;left:50%;transform:translateX(-50%);
@@ -20,51 +20,93 @@
   .stage:active{cursor:grabbing}
 
   .map{display:grid;grid-template-columns:repeat(12,90px);grid-template-rows:repeat(12,90px);
-    transform:rotateX(55deg) rotateZ(-45deg) translateY(-60px);
     transform-style:preserve-3d;background:#2e243a;padding:10px;border-radius:10px;
-    box-shadow:0 20px 60px rgba(0,0,0,.6)}
+    box-shadow:0 20px 60px rgba(0,0,0,.6);
+    /* Начальный поворот карты */
+    transform: rotateX(55deg) rotateZ(-45deg) translateY(-60px);
+    will-change: transform;}
 
   .cell{position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center}
 
   .grass{position:absolute;inset:6px;background:#558b43;border-radius:4px;
     transform:translateZ(1px);box-shadow:inset 0 0 10px rgba(0,0,0,.3)}
 
+  /* Разметка */
   .road-h,.road-v{position:absolute;opacity:.55}
   .road-h{bottom:0;left:0;width:100%;height:2px;
     background:repeating-linear-gradient(90deg,#fff 0 15px,transparent 15px 30px)}
   .road-v{right:0;top:0;width:2px;height:100%;
     background:repeating-linear-gradient(0deg,#fff 0 15px,transparent 15px 30px)}
 
+  /* Фонарики */
   .lamp{position:absolute;width:6px;height:6px;border-radius:50%;background:#ffd700;
     box-shadow:0 0 20px 10px rgba(255,215,0,.35);transform:translateZ(30px);
     pointer-events:none;z-index:10}
 
-  /* Исправленный 3D-домик */
+  /* ========================================= */
+  /* ИСПРАВЛЕННЫЙ 3D ДОМИК */
+  /* ========================================= */
   .house-wrap {
     position: absolute;
-    bottom: 15px;
-    transform: translateZ(1px) rotateZ(45deg) rotateX(-55deg);
+    bottom: 20px; /* Отступ от низа участка */
+    left: 50%;
+    margin-left: -23px; /* Центрируем */
+    width: 46px;
+    /* Магия: отменяем наклон карты, чтобы дом стоял ровно к экрану */
+    transform: rotateZ(45deg) rotateX(-55deg) translateZ(10px);
+    transform-origin: bottom center;
     transform-style: preserve-3d;
     pointer-events: none;
+    animation: dropIn 0.3s ease-out;
   }
 
-  .house{width:46px;height:34px;background:#f0f0f0;
-    border-radius:2px;position:relative;
-    box-shadow: -6px 6px 0 #ccc;}
+  @keyframes dropIn {
+    from { transform: rotateZ(45deg) rotateX(-55deg) translateZ(100px); opacity: 0; }
+    to { transform: rotateZ(45deg) rotateX(-55deg) translateZ(10px); opacity: 1; }
+  }
+
+  /* Тень от дома */
+  .house-shadow {
+    position: absolute; bottom: -5px; left: 5px; width: 40px; height: 10px;
+    background: rgba(0,0,0,0.4); border-radius: 50%; filter: blur(2px);
+    transform: rotateX(90deg); /* Кладем тень на землю */
+  }
+
+  .house {
+    width: 46px; height: 34px; background: #f0f0f0;
+    border-radius: 2px; position: relative;
+    box-shadow: inset -5px -5px 0 rgba(0,0,0,0.1);
+  }
   
-  .house::before{content:'';position:absolute;top:-18px;left:-2px;width:0;height:0;
-    border-left:25px solid transparent;border-right:25px solid transparent;
-    border-bottom:18px solid #c0392b; border-radius:4px;}
+  /* Крыша */
+  .house::before {
+    content:''; position:absolute; top:-18px; left:-2px;
+    border-left:25px solid transparent; border-right:25px solid transparent;
+    border-bottom:18px solid #c0392b; border-radius:4px;
+  }
     
-  .house::after { /* Дверь */
-    content: ''; position: absolute; bottom: 0; left: 15px; width: 14px; height: 18px;
+  /* Дверь */
+  .house::after {
+    content: ''; position: absolute; bottom: 0; left: 16px; width: 14px; height: 18px;
     background: #3b3b85; border-radius: 2px 2px 0 0;
   }
+  
+  /* Окна */
+  .window {
+    position: absolute; width: 8px; height: 8px; background: #ffd700;
+    border-radius: 1px; top: 10px;
+  }
+  .w1 { left: 8px; }
+  .w2 { right: 8px; }
 
-  .nametag{position:absolute;top:-45px;left:50%;transform:translateX(-50%);
-    background:#f5e6a3;color:#333;font-size:11px;font-weight:bold;
-    padding:2px 6px;border-radius:4px;white-space:nowrap;
-    box-shadow:0 2px 5px rgba(0,0,0,.3);}
+  /* Табличка с ником */
+  .nametag {
+    position: absolute; top: -40px; left: 50%; transform: translateX(-50%);
+    background: #f5e6a3; color: #333; font-size: 11px; font-weight: bold;
+    padding: 2px 6px; border-radius: 4px; white-space: nowrap;
+    box-shadow: 0 2px 5px rgba(0,0,0,.3); border: 1px solid #d4c47a;
+  }
+
 </style>
 </head>
 <body>
@@ -81,14 +123,16 @@
 <script>
   const N = 12;
   const mapEl = document.getElementById('map');
+  const stage = document.getElementById('stage');
 
-  // Демо-дома (чтобы ты увидел, как они стоят ровно)
+  // Демо-дома
   const demoData = {
     55: "vika_pro",
     58: "danya_22",
     70: "oleg_nos"
   };
 
+  // Генерация карты
   for (let y = 0; y < N; y++) {
     for (let x = 0; x < N; x++) {
       const cell = document.createElement('div');
@@ -107,10 +151,16 @@
 
       if (demoData[idx]) {
         const wrap = document.createElement('div'); wrap.className = 'house-wrap';
+        const shadow = document.createElement('div'); shadow.className = 'house-shadow';
         const h = document.createElement('div'); h.className = 'house';
+        
+        // Добавляем окна внутрь дома
+        h.innerHTML = '<div class="window w1"></div><div class="window w2"></div>';
+
         const t = document.createElement('div'); t.className = 'nametag';
         t.innerText = demoData[idx];
         
+        wrap.appendChild(shadow);
         wrap.appendChild(h);
         wrap.appendChild(t);
         grass.appendChild(wrap);
@@ -121,34 +171,44 @@
     }
   }
 
-  // Скрипт для вращения карты пальцем/мышкой
+  // ==========================================
+  // ИСПРАВЛЕННОЕ УПРАВЛЕНИЕ (Кручение)
+  // ==========================================
   let isDragging = false;
-  let startX = 0;
-  let currentRotate = -45;
-  const stage = document.getElementById('stage');
+  let previousX = 0;
+  let rotation = -45; // Текущий угол
 
-  function startDrag(e) {
+  // Используем Pointer Events (работает и для мыши, и для пальца)
+  stage.addEventListener('pointerdown', (e) => {
     isDragging = true;
-    startX = e.type.includes('mouse') ? e.clientX : e.touches[0].clientX;
-  }
+    previousX = e.clientX; // Запоминаем где нажали
+    stage.setPointerCapture(e.pointerId);
+  });
 
-  function moveDrag(e) {
+  stage.addEventListener('pointermove', (e) => {
     if (!isDragging) return;
-    const x = e.type.includes('mouse') ? e.clientX : e.touches[0].clientX;
-    const diff = x - startX;
-    currentRotate = -45 + diff * 0.3;
-    mapEl.style.transform = `rotateX(55deg) rotateZ(${currentRotate}deg) translateY(-60px)`;
-  }
+    
+    // Считаем, насколько сдвинулся палец
+    const deltaX = e.clientX - previousX;
+    
+    // Меняем угол (минус = крутится за пальцем, а не против)
+    rotation -= deltaX * 0.4; 
+    
+    // Применяем
+    mapEl.style.transform = `rotateX(55deg) rotateZ(${rotation}deg) translateY(-60px)`;
+    
+    // Обновляем предыдущую точку
+    previousX = e.clientX;
+  });
 
-  function stopDrag() { isDragging = false; }
+  stage.addEventListener('pointerup', (e) => {
+    isDragging = false;
+    stage.releasePointerCapture(e.pointerId);
+  });
 
-  stage.addEventListener('mousedown', startDrag);
-  window.addEventListener('mousemove', moveDrag);
-  window.addEventListener('mouseup', stopDrag);
-
-  stage.addEventListener('touchstart', startDrag, {passive: true});
-  window.addEventListener('touchmove', moveDrag, {passive: true});
-  window.addEventListener('touchend', stopDrag);
+  stage.addEventListener('pointercancel', (e) => {
+    isDragging = false;
+  });
 </script>
 </body>
 </html>
