@@ -26,6 +26,13 @@
     max-width: 250px; line-height: 1.3; backdrop-filter: blur(5px);
   }
 
+  #timeStatus {
+    position: absolute; top: 150px; left: 16px; z-index: 10;
+    font-size: 12px; color: #fff; font-weight: bold;
+    background: rgba(0,0,0,0.5); padding: 4px 8px; border-radius: 6px;
+    backdrop-filter: blur(5px);
+  }
+
   .search {
     position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
     width: 70%; max-width: 280px; z-index: 10; background: rgba(255,255,255,0.95);
@@ -86,6 +93,7 @@
   <div id="meteorTimer">☄️ До метеоритов: --:--:--</div>
 </div>
 <div id="netStatus">🟢 Онлайн</div>
+<div id="timeStatus">☀️ День</div>
 
 <div class="search">
   <span>🔍</span>
@@ -146,7 +154,7 @@ const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const PASSWORD = 'admin';
 const N = 12;
 const SIZE = 20;
-const DAY_CYCLE_SPEED = 0.005; // 200 секунд на полный цикл (3.3 минуты)
+const DAY_CYCLE_SPEED = 0.01; // Полный цикл за 100 секунд (50 сек день, 50 сек ночь)
 
 let money = parseInt(localStorage.getItem('gameMoney')) || 0;
 let myHouseNick = localStorage.getItem('myHouseNick') || '';
@@ -154,18 +162,18 @@ let isMeteorShower = false;
 let meteorShowerTimer = 0;
 let nextMeteorRealTime = getNextMidnight();
 
+// Сохраняем время в локальной памяти, чтобы оно не сбрасывалось!
+let timeOfDay = parseFloat(localStorage.getItem('gameTime')) || 0.2; 
+
 function getNextMidnight() {
   const now = new Date();
   return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0).getTime();
 }
 
 const scene = new THREE.Scene();
-// Начинаем утром
-let timeOfDay = 0.2; 
 scene.background = new THREE.Color(0x87CEEB);
-scene.fog = new THREE.FogExp2(0x87CEEB, 0.000); // Туман по умолчанию выключен
+scene.fog = new THREE.FogExp2(0x87CEEB, 0.000);
 
-// Предсоздаем цвета для смены дня/ночи (чтобы не тормозило)
 const dayColor = new THREE.Color(0x87CEEB);
 const nightColor = new THREE.Color(0x0a0a1a);
 const sunsetColor = new THREE.Color(0xff7e5f);
@@ -181,7 +189,8 @@ document.getElementById('canvas-container').appendChild(renderer.domElement);
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
-controls.maxPolarAngle = Math.PI / 2.2;
+// Ограничиваем камеру, чтобы она не уходила под землю!
+controls.maxPolarAngle = Math.PI / 2.5; 
 controls.target.set(0, 0, 0);
 
 // --- СВЕТ ---
@@ -194,7 +203,6 @@ sunLight.shadow.mapSize.width = 2048; sunLight.shadow.mapSize.height = 2048;
 sunLight.shadow.camera.left = -250; sunLight.shadow.camera.right = 250; sunLight.shadow.camera.top = 250; sunLight.shadow.camera.bottom = -250;
 scene.add(sunLight);
 
-// Солнце и Луна (визуальные)
 const sunMesh = new THREE.Mesh(new THREE.SphereGeometry(20, 16, 16), new THREE.MeshBasicMaterial({ color: 0xffdd55 })); 
 scene.add(sunMesh);
 const moonMesh = new THREE.Mesh(new THREE.SphereGeometry(15, 16, 16), new THREE.MeshBasicMaterial({ color: 0xccccff })); 
@@ -236,13 +244,9 @@ function getGlowTexture() {
 }
 const glowTexture = getGlowTexture();
 
-// --- БАЗА ---
-const basePlate = new THREE.Mesh(new THREE.BoxGeometry(N * SIZE + 10, 2, N * SIZE + 10), new THREE.MeshLambertMaterial({color: 0x5a8f3d}));
-basePlate.position.set(0, -1, 0);
-basePlate.receiveShadow = true;
-mapGroup.add(basePlate);
+// (Я УБРАЛ ОГРОМНУЮ ЗЕЛЕНУЮ ПЛИТУ, ЧТОБЫ НЕ БЫЛО СТЕН)
 
-// --- КАРТА ---
+// --- ГЕНЕРАЦИЯ КАРТЫ ---
 for (let x = 0; x < N; x++) {
   for (let z = 0; z < N; z++) {
     const grassColor = Math.random() > 0.5 ? 0x7CFC00 : 0x6ecf00;
@@ -490,14 +494,16 @@ walkBtn.onclick = () => {
     
     playerGroup.visible = true;
     
-    controls.minDistance = 40; controls.maxDistance = 120; controls.maxPolarAngle = Math.PI / 2.05;
-    controls.target.set(playerGroup.position.x, 5, playerGroup.position.z - 10);
-    camera.position.set(playerGroup.position.x, 90, playerGroup.position.z + 70); 
+    // Настраиваем камеру для ходьбы
+    controls.minDistance = 30; 
+    controls.maxDistance = 100; 
+    controls.target.set(playerGroup.position.x, 5, playerGroup.position.z);
+    camera.position.set(playerGroup.position.x, 60, playerGroup.position.z + 50); 
     
     dpad.classList.add('show');
   } else {
     playerGroup.visible = false;
-    controls.minDistance = 40; controls.maxDistance = 350; controls.maxPolarAngle = Math.PI / 2.2;
+    controls.minDistance = 40; controls.maxDistance = 350;
     controls.target.set(0, 0, 0); camera.position.set(120, 150, 120);
     dpad.classList.remove('show'); moveForward = 0; moveRight = 0;
   }
@@ -524,10 +530,12 @@ function animate() {
     const right = new THREE.Vector3(); right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
     const moveDelta = new THREE.Vector3().addScaledVector(forward, moveForward * moveSpeed).addScaledVector(right, moveRight * moveSpeed);
     
+    // Двигаем игрока
     playerGroup.position.add(moveDelta);
     if (moveDelta.length() > 0) playerGroup.rotation.y = Math.atan2(moveDelta.x, moveDelta.z);
     
-    controls.target.set(playerGroup.position.x, 5, playerGroup.position.z - 10);
+    // Камера плавно летит за игроком (исправлено!)
+    controls.target.add(moveDelta);
     camera.position.add(moveDelta); 
   }
 
@@ -545,44 +553,48 @@ function animate() {
     document.getElementById('meteorTimer').innerText = `☄️ ДОЖДЬ: ${Math.ceil(meteorShowerTimer)}с!`;
   }
 
-  // === ИСПРАВЛЕННЫЙ ЦИКЛ ДНЯ И НОЧИ ===
+  // === СМЕНА ДНЯ И НОЧИ (ИСПРАВЛЕНО) ===
   timeOfDay = (timeOfDay + delta * DAY_CYCLE_SPEED) % 1.0;
-  const sunAngle = timeOfDay * Math.PI * 2;
-  const sunHeight = Math.sin(sunAngle); // от -1 до 1
+  localStorage.setItem('gameTime', timeOfDay); // Сохраняем время
   
-  // Двигаем солнце и луну
+  const sunAngle = timeOfDay * Math.PI * 2;
+  const sunHeight = Math.sin(sunAngle); 
+  
   sunMesh.position.set(Math.cos(sunAngle)*100, sunHeight*200, 100); 
   moonMesh.position.set(Math.cos(sunAngle+Math.PI)*100, Math.sin(sunAngle+Math.PI)*200, 100);
   sunLight.position.copy(sunMesh.position);
+  
+  const timeEl = document.getElementById('timeStatus');
   
   if (sunHeight > 0.1) {
       // ДЕНЬ
       sunLight.intensity = Math.min(1.5, sunHeight * 2.5);
       ambientLight.intensity = 0.6;
-      currentBgColor.lerpColors(dayColor, dayColor, 1); // Остается дневным
-      scene.fog.density = 0; // Убираем туман
+      currentBgColor.copy(dayColor);
+      scene.fog.density = 0;
+      timeEl.innerText = '☀️ День';
   } else if (sunHeight > -0.1) {
-      // ЗАКАТ / РАССВЕТ
+      // ЗАКАТ
       sunLight.intensity = Math.max(0, sunHeight * 2);
       ambientLight.intensity = 0.4;
-      // Плавно перекрашиваем небо в закат
       const t = (sunHeight + 0.1) / 0.2; 
       currentBgColor.lerpColors(nightColor, sunsetColor, t);
-      scene.fog.density = 0.001; // Легкий туман
+      scene.fog.density = 0.001;
+      timeEl.innerText = '🌅 Закат/Рассвет';
   } else {
       // НОЧЬ
       sunLight.intensity = 0; 
-      ambientLight.intensity = 0.25; // Лунный свет, чтобы все было видно
-      ambientLight.color.setHex(0x334466); // Синеватый оттенок
-      currentBgColor.lerpColors(nightColor, nightColor, 1);
-      scene.fog.density = 0.003; // Легкий ночной туман!
+      ambientLight.intensity = 0.3; // Луна светит
+      ambientLight.color.setHex(0x556699); // Синеватый свет
+      currentBgColor.copy(nightColor);
+      scene.fog.density = 0.0015; // Легкий туман
+      timeEl.innerText = '🌙 Ночь';
   }
   
-  // Применяем цвета неба
   scene.background.copy(currentBgColor);
   scene.fog.color.copy(currentBgColor);
 
-  // Фонари (включаются ночью)
+  // Фонари
   const isNight = sunHeight < 0.1;
   lamps.forEach(l => { 
       if (isNight) { 
@@ -599,7 +611,7 @@ function animate() {
   cloudsGroup.children.forEach(c => {
       c.position.x += 0.05;
       if(c.position.x > 400) c.position.x = -400;
-      c.visible = !isNight; // Ночью облака прячем
+      c.visible = !isNight; 
   });
 
   controls.update(); renderer.render(scene, camera);
