@@ -33,6 +33,13 @@
     backdrop-filter: blur(5px);
   }
 
+  /* Подсказка для ПК */
+  #pcHint {
+    position: absolute; bottom: 100px; left: 50%; transform: translateX(-50%);
+    color: rgba(255,255,255,0.7); font-size: 14px; text-shadow: 1px 1px 2px #000;
+    display: none; pointer-events: none; text-align: center; line-height: 1.4;
+  }
+
   .search {
     position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
     width: 70%; max-width: 280px; z-index: 10; background: rgba(255,255,255,0.95);
@@ -94,6 +101,7 @@
 </div>
 <div id="netStatus">🟢 Онлайн</div>
 <div id="timeStatus">☀️ День</div>
+<div id="pcHint">Управление: W A S D или Стрелки<br>Мышка — камера</div>
 
 <div class="search">
   <span>🔍</span>
@@ -163,7 +171,6 @@ let meteorShowerTimer = 0;
 let nextMeteorRealTime = getNextMidnight();
 let timeOfDay = parseFloat(localStorage.getItem('gameTime')) || 0.2; 
 
-// Словари для чужих игроков
 const otherPlayers = {};
 const otherPlayersTimeouts = {};
 
@@ -194,7 +201,6 @@ controls.enableDamping = true;
 controls.maxPolarAngle = Math.PI / 2.5; 
 controls.target.set(0, 0, 0);
 
-// --- СВЕТ ---
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
 scene.add(ambientLight);
 const sunLight = new THREE.DirectionalLight(0xfffbda, 1.2);
@@ -209,7 +215,6 @@ scene.add(sunMesh);
 const moonMesh = new THREE.Mesh(new THREE.SphereGeometry(15, 16, 16), new THREE.MeshBasicMaterial({ color: 0xccccff })); 
 scene.add(moonMesh);
 
-// --- ОБЛАКА ---
 const cloudsGroup = new THREE.Group();
 const cloudMat = new THREE.MeshLambertMaterial({color: 0xffffff, transparent: true, opacity: 0.9});
 for(let i=0; i<15; i++){
@@ -230,7 +235,6 @@ let housesData = [];
 let isAdmin = false;
 const lamps = []; 
 
-// --- ТЕКСТУРА СВЕЧЕНИЯ ---
 function getGlowTexture() {
   const canvas = document.createElement('canvas');
   canvas.width = 64; canvas.height = 64;
@@ -245,7 +249,6 @@ function getGlowTexture() {
 }
 const glowTexture = getGlowTexture();
 
-// --- ГЕНЕРАЦИЯ КАРТЫ ---
 for (let x = 0; x < N; x++) {
   for (let z = 0; z < N; z++) {
     const grassColor = Math.random() > 0.5 ? 0x7CFC00 : 0x6ecf00;
@@ -318,7 +321,6 @@ for (let x = 0; x < N; x++) {
 }
 mapGroup.position.set(-N * SIZE / 2 + SIZE / 2, 0, -N * SIZE / 2 + SIZE / 2);
 
-// === ФУНКЦИЯ СОЗДАНИЯ ЧЕЛОВЕЧКА ===
 function createPlayerModel(bodyColor) {
     const group = new THREE.Group();
     const pBody = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 5, 8), new THREE.MeshLambertMaterial({color: bodyColor}));
@@ -336,12 +338,10 @@ function createPlayerModel(bodyColor) {
     return group;
 }
 
-// Мой персонаж (синий)
 const playerGroup = createPlayerModel(0x3498db);
 playerGroup.visible = false;
 scene.add(playerGroup); 
 
-// --- ДОМА ---
 function createNametag(text, yPos = 12) {
   const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
   canvas.width = 256; canvas.height = 64;
@@ -482,43 +482,37 @@ db.channel('meteors')
   .on('broadcast', { event: 'shower' }, payload => { if (!isMeteorShower) triggerMeteorShower(true); })
   .subscribe();
 
-// === СИНХРОНИЗАЦИЯ ИГРОКОВ ===
 const gameChannel = db.channel('game_channel');
 
 gameChannel
   .on('broadcast', { event: 'player_move' }, payload => {
       const data = payload.payload; 
-      if (data.nickname === myHouseNick) return; // Себя не рисуем
+      if (data.nickname === myHouseNick) return; 
       
       let p = otherPlayers[data.nickname];
       if (!p) {
-          // Создаем нового красного человечка для другого игрока
           p = createPlayerModel(0xe74c3c); 
           p.position.set(data.x, data.y, data.z);
           p.rotation.y = data.rotY;
-          
           const tag = createNametag(data.nickname, 10);
           tag.scale.set(10, 2.5, 1);
           p.add(tag);
-          
           scene.add(p);
           otherPlayers[data.nickname] = p;
           p.userData.target = new THREE.Vector3(data.x, data.y, data.z);
           p.userData.targetRotY = data.rotY;
       } else {
-          // Обновляем цель (для плавного движения)
           if(!p.userData.target) p.userData.target = new THREE.Vector3();
           p.userData.target.set(data.x, data.y, data.z);
           p.userData.targetRotY = data.rotY;
       }
       
-      // Сбрасываем таймер удаления
       if (otherPlayersTimeouts[data.nickname]) clearTimeout(otherPlayersTimeouts[data.nickname]);
       otherPlayersTimeouts[data.nickname] = setTimeout(() => {
           scene.remove(p);
           delete otherPlayers[data.nickname];
           delete otherPlayersTimeouts[data.nickname];
-      }, 3000); // Если 3 сек нет пингов - удаляем
+      }, 3000);
   })
   .on('broadcast', { event: 'player_leave' }, payload => {
       const nickname = payload.payload.nickname;
@@ -531,9 +525,34 @@ gameChannel
   })
   .subscribe();
 
-// --- УПРАВЛЕНИЕ ХОДЬБОЙ ---
+// --- УПРАВЛЕНИЕ ---
 let isWalking = false, moveForward = 0, moveRight = 0;
 const dpad = document.getElementById('dpad'), walkBtn = document.getElementById('walkBtn');
+const pcHint = document.getElementById('pcHint');
+
+// Обработка клавиатуры для ПК
+const keys = { w: false, a: false, s: false, d: false, up: false, down: false, left: false, right: false };
+
+window.addEventListener('keydown', (e) => {
+  const k = e.key.toLowerCase();
+  if (k === 'w' || k === 'ц' || k === 'arrowup') { keys.w = true; keys.up = true; }
+  if (k === 'a' || k === 'ф' || k === 'arrowleft') { keys.a = true; keys.left = true; }
+  if (k === 's' || k === 'ы' || k === 'arrowdown') { keys.s = true; keys.down = true; }
+  if (k === 'd' || k === 'в' || k === 'arrowright') { keys.d = true; keys.right = true; }
+  
+  // Блокируем скролл страницы стрелками, если мы ходим
+  if (isWalking && ['w','a','s','d','ц','ф','ы','в','arrowup','arrowdown','arrowleft','arrowright'].includes(k)) {
+      e.preventDefault();
+  }
+});
+
+window.addEventListener('keyup', (e) => {
+  const k = e.key.toLowerCase();
+  if (k === 'w' || k === 'ц' || k === 'arrowup') { keys.w = false; keys.up = false; }
+  if (k === 'a' || k === 'ф' || k === 'arrowleft') { keys.a = false; keys.left = false; }
+  if (k === 's' || k === 'ы' || k === 'arrowdown') { keys.s = false; keys.down = false; }
+  if (k === 'd' || k === 'в' || k === 'arrowright') { keys.d = false; keys.right = false; }
+});
 
 walkBtn.onclick = () => {
   isWalking = !isWalking; walkBtn.classList.toggle('active', isWalking);
@@ -548,20 +567,22 @@ walkBtn.onclick = () => {
     }
     
     playerGroup.visible = true;
-    
     controls.minDistance = 30; 
     controls.maxDistance = 100; 
     controls.target.set(playerGroup.position.x, 5, playerGroup.position.z);
     camera.position.set(playerGroup.position.x, 60, playerGroup.position.z + 50); 
     
     dpad.classList.add('show');
+    // Показываем подсказку для ПК
+    pcHint.style.display = 'block';
+    setTimeout(() => pcHint.style.display = 'none', 5000); // Прячем через 5 секунд
   } else {
     playerGroup.visible = false;
     controls.minDistance = 40; controls.maxDistance = 350;
     controls.target.set(0, 0, 0); camera.position.set(120, 150, 120);
     dpad.classList.remove('show'); moveForward = 0; moveRight = 0;
+    pcHint.style.display = 'none';
     
-    // Сообщаем всем, что мы вышли
     gameChannel.send({ type: 'broadcast', event: 'player_leave', payload: { nickname: myHouseNick } });
   }
 };
@@ -582,12 +603,20 @@ function animate() {
   requestAnimationFrame(animate);
   const delta = clock.getDelta();
   
-  // Движение моего персонажа
-  if (isWalking && (moveForward !== 0 || moveRight !== 0)) {
+  // Вычисляем направление движения (объединяем клавиатуру и джойстик)
+  let f = moveForward;
+  let r = moveRight;
+
+  if (keys.w || keys.up) f = 1;
+  if (keys.s || keys.down) f = -1;
+  if (keys.d || keys.right) r = 1;
+  if (keys.a || keys.left) r = -1;
+
+  if (isWalking && (f !== 0 || r !== 0)) {
     const moveSpeed = 0.6;
     const forward = new THREE.Vector3(); camera.getWorldDirection(forward); forward.y = 0; forward.normalize();
     const right = new THREE.Vector3(); right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
-    const moveDelta = new THREE.Vector3().addScaledVector(forward, moveForward * moveSpeed).addScaledVector(right, moveRight * moveSpeed);
+    const moveDelta = new THREE.Vector3().addScaledVector(forward, f * moveSpeed).addScaledVector(right, r * moveSpeed);
     
     playerGroup.position.add(moveDelta);
     if (moveDelta.length() > 0) playerGroup.rotation.y = Math.atan2(moveDelta.x, moveDelta.z);
@@ -596,7 +625,6 @@ function animate() {
     camera.position.add(moveDelta); 
   }
 
-  // Отправка координат на сервер (если ходим)
   if (isWalking && myHouseNick) {
       if (Date.now() - lastSendTime > 100) { // 10 раз в секунду
           gameChannel.send({
@@ -614,11 +642,10 @@ function animate() {
       }
   }
 
-  // Плавное движение чужих игроков
   for (const nick in otherPlayers) {
       const p = otherPlayers[nick];
       if (p.userData.target) {
-          p.position.lerp(p.userData.target, 0.2); // Плавно скользим
+          p.position.lerp(p.userData.target, 0.2);
           p.rotation.y = p.userData.targetRotY;
       }
   }
@@ -637,7 +664,6 @@ function animate() {
     document.getElementById('meteorTimer').innerText = `☄️ ДОЖДЬ: ${Math.ceil(meteorShowerTimer)}с!`;
   }
 
-  // === СМЕНА ДНЯ И НОЧИ ===
   timeOfDay = (timeOfDay + delta * DAY_CYCLE_SPEED) % 1.0;
   localStorage.setItem('gameTime', timeOfDay); 
   
