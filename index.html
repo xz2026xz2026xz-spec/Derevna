@@ -33,7 +33,6 @@
     backdrop-filter: blur(5px);
   }
 
-  /* Подсказка для ПК */
   #pcHint {
     position: absolute; bottom: 100px; left: 50%; transform: translateX(-50%);
     color: rgba(255,255,255,0.7); font-size: 14px; text-shadow: 1px 1px 2px #000;
@@ -56,9 +55,29 @@
   }
   #walkBtn { bottom: 20px; left: 20px; background: #8e44ad; border-color: #9b59b6; }
   #walkBtn.active { background: #27ae60; border-color: #2ecc71; }
+  
+  /* Кнопки справа */
   #shopBtn { bottom: 90px; right: 20px; background: #2980b9; border-color: #3498db; }
+  #chatBtn { bottom: 160px; right: 20px; background: #2c3e50; border-color: #34495e; }
   #adminBtn { bottom: 20px; right: 20px; background: #26262f; }
   #adminBtn.on { background: #c0392b; border-color: #e74c3c; }
+
+  /* Окно чата */
+  #chatWindow {
+    position: absolute; bottom: 230px; right: 20px; width: 280px; height: 350px;
+    background: rgba(30, 30, 40, 0.95); border: 1px solid #444; border-radius: 12px;
+    display: none; flex-direction: column; z-index: 30; overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5); backdrop-filter: blur(5px);
+  }
+  #chatWindow.open { display: flex; }
+  #chatHeader { padding: 10px; background: #2c3e50; color: white; font-weight: bold; text-align: center; display: flex; justify-content: space-between; align-items: center; }
+  #chatHeader span { cursor: pointer; color: #e74c3c; padding: 0 5px; }
+  #chatMessages { flex: 1; padding: 10px; overflow-y: auto; color: white; font-size: 13px; display: flex; flex-direction: column; gap: 6px; }
+  .chat-msg { background: rgba(255,255,255,0.1); padding: 6px 10px; border-radius: 8px; word-wrap: break-word; }
+  .chat-msg b { color: #f5e6a3; }
+  #chatInputBox { display: flex; padding: 10px; border-top: 1px solid #444; background: #1e1e28; }
+  #chatInputBox input { flex: 1; background: #101015; border: 1px solid #333; color: white; padding: 8px; border-radius: 6px; outline: none; }
+  #chatInputBox button { background: #27ae60; border: none; color: white; padding: 0 15px; margin-left: 8px; border-radius: 6px; cursor: pointer; font-weight: bold; }
 
   #dpad {
     position: absolute; bottom: 100px; left: 20px; z-index: 20;
@@ -82,12 +101,15 @@
   
   #adminPanel {
     position: absolute; top: 0; right: -320px; width: 300px; height: 100%; background: #1e1e28; border-left: 1px solid #333; z-index: 30;
-    padding: 20px; display: flex; flex-direction: column; gap: 12px; transition: right 0.3s ease; color: white; box-shadow: -5px 0 20px rgba(0,0,0,0.5);
+    padding: 20px; display: flex; flex-direction: column; gap: 10px; transition: right 0.3s ease; color: white; box-shadow: -5px 0 20px rgba(0,0,0,0.5); overflow-y: auto;
   }
   #adminPanel.open { right: 0; }
-  #adminPanel textarea { width: 100%; height: 100px; background: #101015; color: white; border: 1px solid #333; border-radius: 8px; padding: 10px; font-family: monospace; resize: none; }
-  #adminPanel button { padding: 12px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; color: white; background: #27ae60; }
-  #adminPanel button.red { background: #c0392b; } #adminPanel button.gray { background: #444; }
+  #adminPanel textarea { width: 100%; height: 80px; background: #101015; color: white; border: 1px solid #333; border-radius: 8px; padding: 10px; font-family: monospace; resize: none; }
+  #adminPanel button { padding: 10px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; color: white; background: #27ae60; }
+  #adminPanel button.red { background: #c0392b; }
+  #adminPanel button.blue { background: #2980b9; }
+  #adminPanel button.gray { background: #444; }
+  #adminPanel hr { border-color: #333; margin: 5px 0; }
 </style>
 <script type="importmap">
 { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }
@@ -109,8 +131,22 @@
 </div>
 
 <button class="btn" id="walkBtn">🫈</button>
+<button class="btn" id="chatBtn">💬</button>
 <button class="btn" id="shopBtn">🛒</button>
 <button class="btn" id="adminBtn">⚙️</button>
+
+<!-- Чат -->
+<div id="chatWindow">
+  <div id="chatHeader">
+    <span style="color:white">Чат деревни</span>
+    <span onclick="document.getElementById('chatWindow').classList.remove('open')">✖</span>
+  </div>
+  <div id="chatMessages"></div>
+  <div id="chatInputBox">
+    <input type="text" id="chatInput" placeholder="Сообщение..." maxlength="50">
+    <button onclick="sendChat()">➤</button>
+  </div>
+</div>
 
 <div id="dpad">
   <button id="btnUp">⬆️</button> <button id="btnLeft">⬅️</button> <button id="btnDown">⬇️</button> <button id="btnRight">➡️</button>
@@ -121,7 +157,7 @@
     <h3>🛒 Магазин улучшений</h3>
     <p style="font-size: 12px; color: #aaa; text-align: center; margin-bottom: 15px;">Твой дом: <span id="myHouseName" style="color: #f5e6a3;">Не выбран</span></p>
     <button class="btn-buy" onclick="buyUpgrade('shield')">🛡️ Купить щит (50$)</button>
-    <button class="btn-buy" onclick="buyUpgrade('height')">📈 Сделать дом выше (30$)</button>
+    <button class="btn-buy" onclick="buyUpgrade('height')">🏢 Построить этаж (30$)</button>
     <hr style="border-color:#333; margin: 10px 0;">
     <button class="btn-buy" style="background:#d35400;" onclick="buyUpgrade('skin_pineapple')">🍍 Дом-Ананас (100$)</button>
     <button class="btn-buy" style="background:#7f8c8d;" onclick="buyUpgrade('skin_castle')">🏰 Дом-Замок (100$)</button>
@@ -144,8 +180,13 @@
   <p style="font-size:12px; color:#aaa;">Ники подписчиков (через Enter):</p>
   <textarea id="nicksInput" placeholder="Tima&#10;vika_pro"></textarea>
   <button onclick="addHouses()">➕ Добавить</button>
-  <button class="red" onclick="triggerMeteor()">☄️ Вызвать метеориты</button>
+  
+  <hr>
+  <p style="font-size:12px; color:#e74c3c;">⚠️ Нажми на дом на карте, чтобы удалить его!</p>
+  <button class="blue" onclick="shieldAll()">🛡️ Выдать щиты всем</button>
   <button class="red" onclick="clearAll()">🗑 Удалить все дома</button>
+  <button class="red" onclick="triggerMeteor()">☄️ Вызвать метеориты</button>
+  
   <button class="gray" onclick="logout()" style="margin-top:auto;">Выйти</button>
 </div>
 
@@ -201,6 +242,7 @@ controls.enableDamping = true;
 controls.maxPolarAngle = Math.PI / 2.5; 
 controls.target.set(0, 0, 0);
 
+// --- СВЕТ ---
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
 scene.add(ambientLight);
 const sunLight = new THREE.DirectionalLight(0xfffbda, 1.2);
@@ -215,6 +257,7 @@ scene.add(sunMesh);
 const moonMesh = new THREE.Mesh(new THREE.SphereGeometry(15, 16, 16), new THREE.MeshBasicMaterial({ color: 0xccccff })); 
 scene.add(moonMesh);
 
+// --- ОБЛАКА ---
 const cloudsGroup = new THREE.Group();
 const cloudMat = new THREE.MeshLambertMaterial({color: 0xffffff, transparent: true, opacity: 0.9});
 for(let i=0; i<15; i++){
@@ -235,6 +278,7 @@ let housesData = [];
 let isAdmin = false;
 const lamps = []; 
 
+// --- ТЕКСТУРА СВЕЧЕНИЯ ---
 function getGlowTexture() {
   const canvas = document.createElement('canvas');
   canvas.width = 64; canvas.height = 64;
@@ -249,6 +293,7 @@ function getGlowTexture() {
 }
 const glowTexture = getGlowTexture();
 
+// --- КАРТА ---
 for (let x = 0; x < N; x++) {
   for (let z = 0; z < N; z++) {
     const grassColor = Math.random() > 0.5 ? 0x7CFC00 : 0x6ecf00;
@@ -321,6 +366,7 @@ for (let x = 0; x < N; x++) {
 }
 mapGroup.position.set(-N * SIZE / 2 + SIZE / 2, 0, -N * SIZE / 2 + SIZE / 2);
 
+// === ИГРОКИ ===
 function createPlayerModel(bodyColor) {
     const group = new THREE.Group();
     const pBody = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 5, 8), new THREE.MeshLambertMaterial({color: bodyColor}));
@@ -342,6 +388,7 @@ const playerGroup = createPlayerModel(0x3498db);
 playerGroup.visible = false;
 scene.add(playerGroup); 
 
+// --- ДОМА ---
 function createNametag(text, yPos = 12) {
   const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
   canvas.width = 256; canvas.height = 64;
@@ -354,54 +401,68 @@ function createNametag(text, yPos = 12) {
   return sprite;
 }
 
-function createHouseModel(skin) {
+function createHouseModel(skin, level) {
     const g = new THREE.Group();
     const windowMat = new THREE.MeshBasicMaterial({ color: 0xffeeaa }); 
     const doorMat = new THREE.MeshLambertMaterial({ color: 0x5c3a21 });
+    const extraHeight = (level - 1) * 3; // Каждый уровень добавляет 3 единицы высоты
 
     if (skin === 'pineapple') {
         const body = new THREE.Mesh(new THREE.SphereGeometry(4.5, 16, 16), new THREE.MeshLambertMaterial({ color: 0xffaa00 }));
-        body.scale.y = 1.4; body.position.y = 6; body.castShadow = true; g.add(body);
-        const door = new THREE.Mesh(new THREE.BoxGeometry(2, 3, 0.5), doorMat); door.position.set(0, 2, 4.2); g.add(door);
-        const win1 = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1.5), windowMat); win1.position.set(-2, 6, 4.1); g.add(win1);
-        const win2 = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1.5), windowMat); win2.position.set(2, 6, 4.1); g.add(win2);
+        // Ананас расширяется и вширь, и ввысь, но стоит на земле
+        body.scale.set(1 + extraHeight * 0.05, 1.4 + extraHeight * 0.1, 1 + extraHeight * 0.05);
+        body.position.y = 4.5 + extraHeight / 2; 
+        body.castShadow = true; g.add(body);
+        
+        const door = new THREE.Mesh(new THREE.BoxGeometry(2, 3, 0.5), doorMat); door.position.set(0, 2, 4.3 + extraHeight*0.05); g.add(door);
+        const win1 = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1.5), windowMat); win1.position.set(-2, 5 + extraHeight/2, 4.2 + extraHeight*0.05); g.add(win1);
+        const win2 = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1.5), windowMat); win2.position.set(2, 5 + extraHeight/2, 4.2 + extraHeight*0.05); g.add(win2);
+        
         const leafMat = new THREE.MeshLambertMaterial({ color: 0x2e8b57 });
         for(let i=0; i<6; i++){
             const leaf = new THREE.Mesh(new THREE.ConeGeometry(1.5, 5, 4), leafMat);
-            leaf.position.set(Math.random()*2-1, 11, Math.random()*2-1);
+            leaf.position.set(Math.random()*2-1, 10 + extraHeight, Math.random()*2-1);
             leaf.rotation.x = Math.random()*0.5; leaf.rotation.z = Math.random()*0.5;
             leaf.castShadow = true; g.add(leaf);
         }
     } else if (skin === 'castle') {
         const stoneMat = new THREE.MeshLambertMaterial({ color: 0x888888 });
-        const base = new THREE.Mesh(new THREE.BoxGeometry(8, 8, 8), stoneMat); base.position.y = 4; base.castShadow = true; g.add(base);
+        const baseH = 8 + extraHeight;
+        const base = new THREE.Mesh(new THREE.BoxGeometry(8, baseH, 8), stoneMat); 
+        base.position.y = baseH / 2; base.castShadow = true; g.add(base);
+        
         const door = new THREE.Mesh(new THREE.BoxGeometry(2.5, 4, 0.5), doorMat); door.position.set(0, 2, 4.1); g.add(door);
         const win1 = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 2), windowMat); win1.position.set(-2.5, 5, 4.1); g.add(win1);
         const win2 = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 2), windowMat); win2.position.set(2.5, 5, 4.1); g.add(win2);
+        
         const tPos = [[-4,4], [4,4], [-4,-4], [4,-4]];
         tPos.forEach(p => {
-            const tower = new THREE.Mesh(new THREE.CylinderGeometry(2, 2, 11, 8), stoneMat);
-            tower.position.set(p[0], 5.5, p[1]); tower.castShadow = true; g.add(tower);
+            const towerH = 11 + extraHeight;
+            const tower = new THREE.Mesh(new THREE.CylinderGeometry(2, 2, towerH, 8), stoneMat);
+            tower.position.set(p[0], towerH/2, p[1]); tower.castShadow = true; g.add(tower);
             const roof = new THREE.Mesh(new THREE.ConeGeometry(2.5, 4, 8), new THREE.MeshLambertMaterial({color: 0x8b0000}));
-            roof.position.set(p[0], 13, p[1]); roof.castShadow = true; g.add(roof);
+            roof.position.set(p[0], towerH + 2, p[1]); roof.castShadow = true; g.add(roof);
         });
     } else {
-        const walls = new THREE.Mesh(new THREE.BoxGeometry(6, 6, 6), new THREE.MeshLambertMaterial({ color: 0xeeeeee }));
-        walls.position.y = 3; walls.castShadow = true; walls.receiveShadow = true; g.add(walls);
+        const wallH = 6 + extraHeight;
+        const walls = new THREE.Mesh(new THREE.BoxGeometry(6, wallH, 6), new THREE.MeshLambertMaterial({ color: 0xeeeeee }));
+        walls.position.y = wallH / 2; walls.castShadow = true; walls.receiveShadow = true; g.add(walls);
+        
         const roof = new THREE.Mesh(new THREE.ConeGeometry(5, 4, 4), new THREE.MeshLambertMaterial({ color: 0x3b3b85 }));
-        roof.position.y = 8; roof.rotation.y = Math.PI / 4; roof.castShadow = true; g.add(roof);
+        roof.position.y = wallH + 2; roof.rotation.y = Math.PI / 4; roof.castShadow = true; g.add(roof);
+        
         const door = new THREE.Mesh(new THREE.BoxGeometry(1.5, 3, 0.5), doorMat); door.position.set(0, 1.5, 3.1); g.add(door);
-        const win1 = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.2), windowMat); win1.position.set(-1.8, 4, 3.1); g.add(win1);
-        const win2 = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.2), windowMat); win2.position.set(1.8, 4, 3.1); g.add(win2);
+        const win1 = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.2), windowMat); win1.position.set(-1.8, 4 + extraHeight/2, 3.1); g.add(win1);
+        const win2 = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.2), windowMat); win2.position.set(1.8, 4 + extraHeight/2, 3.1); g.add(win2);
     }
     return g;
 }
 
 function createHouseObj(h) {
   const houseGroup = new THREE.Group();
-  const model = createHouseModel(h.skin || 'default');
+  const model = createHouseModel(h.skin || 'default', h.height_level || 1);
   houseGroup.add(model);
-  houseGroup.add(createNametag(h.nickname));
+  houseGroup.add(createNametag(h.nickname, 12 + (h.height_level-1)*3));
   
   houseGroup.position.set(h.x * SIZE, 0.5, h.z * SIZE);
   houseGroup.userData = h;
@@ -413,23 +474,27 @@ function applyUpgradesToHouse(mesh) {
   const h = mesh.userData;
   if (h.is_dead) { mesh.scale.set(0.1, 0.1, 0.1); return; }
   
-  mesh.scale.y = 1 + (h.height_level - 1) * 0.3;
-  mesh.position.y = 0.5 + (h.height_level - 1) * 2;
+  // Сбрасываем позицию (дом больше не парит)
+  mesh.scale.set(1, 1, 1);
+  mesh.position.y = 0.5;
 
-  const currentSkin = mesh.children[0].userData.skin || 'default';
-  if (currentSkin !== (h.skin || 'default')) {
-      mesh.remove(mesh.children[0]);
-      const newModel = createHouseModel(h.skin || 'default');
-      newModel.userData.skin = h.skin;
-      mesh.add(newModel);
-  }
+  // Пересоздаем модель (если изменился скин или высота)
+  mesh.remove(mesh.children[0]);
+  const newModel = createHouseModel(h.skin || 'default', h.height_level || 1);
+  newModel.userData.skin = h.skin;
+  mesh.add(newModel);
+
+  // Обновляем табличку (поднимаем ее выше, если дом вырос)
+  mesh.remove(mesh.children[1]);
+  mesh.add(createNametag(h.nickname, 12 + (h.height_level-1)*3));
 
   const oldShield = mesh.children.find(c => c.geometry?.type === 'SphereGeometry' && c.material.wireframe);
   if (oldShield) mesh.remove(oldShield);
   
   if (h.has_shield) {
-    const shieldMesh = new THREE.Mesh(new THREE.SphereGeometry(9, 16, 16), new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.3, wireframe: true }));
-    shieldMesh.position.y = 6;
+    const shieldRadius = 9 + (h.height_level-1)*1.5;
+    const shieldMesh = new THREE.Mesh(new THREE.SphereGeometry(shieldRadius, 16, 16), new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.3, wireframe: true }));
+    shieldMesh.position.y = shieldRadius * 0.6;
     mesh.add(shieldMesh);
   }
 }
@@ -457,13 +522,10 @@ function removeHouseFromScene(nickname) {
 async function loadHouses() {
   const { data, error } = await db.from('houses').select('*');
   if (error) { 
-    console.error(error); 
     document.getElementById('netStatus').innerText = '🔴 БД: ' + error.message; 
-    document.getElementById('netStatus').style.color = '#e74c3c';
     return; 
   }
   document.getElementById('netStatus').innerText = '🟢 Онлайн';
-  document.getElementById('netStatus').style.color = '#2ecc71';
   
   [...housesGroup.children].forEach(m => housesGroup.remove(m));
   housesData = [];
@@ -478,12 +540,47 @@ db.channel('public:houses')
     updateUI();
   }).subscribe();
 
-db.channel('meteors')
-  .on('broadcast', { event: 'shower' }, payload => { if (!isMeteorShower) triggerMeteorShower(true); })
+// === ЧАТ ===
+const chatChannel = db.channel('chat_channel');
+chatChannel
+  .on('broadcast', { event: 'msg' }, payload => {
+      const data = payload.payload;
+      const chatBox = document.getElementById('chatMessages');
+      const div = document.createElement('div');
+      div.className = 'chat-msg';
+      div.innerHTML = `<b>${data.nick}:</b> ${data.text}`;
+      chatBox.appendChild(div);
+      chatBox.scrollTop = chatBox.scrollHeight;
+  })
   .subscribe();
 
-const gameChannel = db.channel('game_channel');
+window.sendChat = () => {
+  const input = document.getElementById('chatInput');
+  const text = input.value.trim();
+  if (!text || !myHouseNick) return;
+  
+  chatChannel.send({ type: 'broadcast', event: 'msg', payload: { nick: myHouseNick, text: text } });
+  
+  // Добавляем сообщение себе сразу
+  const chatBox = document.getElementById('chatMessages');
+  const div = document.createElement('div');
+  div.className = 'chat-msg';
+  div.innerHTML = `<b>${myHouseNick}:</b> ${text}`;
+  chatBox.appendChild(div);
+  chatBox.scrollTop = chatBox.scrollHeight;
+  
+  input.value = '';
+};
 
+document.getElementById('chatBtn').onclick = () => {
+  document.getElementById('chatWindow').classList.toggle('open');
+};
+document.getElementById('chatInput').addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') sendChat();
+});
+
+// === СИНХРОНИЗАЦИЯ ДВИЖЕНИЯ ===
+const gameChannel = db.channel('game_channel');
 gameChannel
   .on('broadcast', { event: 'player_move' }, payload => {
       const data = payload.payload; 
@@ -525,12 +622,15 @@ gameChannel
   })
   .subscribe();
 
-// --- УПРАВЛЕНИЕ ---
+db.channel('meteors')
+  .on('broadcast', { event: 'shower' }, payload => { if (!isMeteorShower) triggerMeteorShower(true); })
+  .subscribe();
+
+// === УПРАВЛЕНИЕ ===
 let isWalking = false, moveForward = 0, moveRight = 0;
 const dpad = document.getElementById('dpad'), walkBtn = document.getElementById('walkBtn');
 const pcHint = document.getElementById('pcHint');
 
-// Обработка клавиатуры для ПК
 const keys = { w: false, a: false, s: false, d: false, up: false, down: false, left: false, right: false };
 
 window.addEventListener('keydown', (e) => {
@@ -539,11 +639,7 @@ window.addEventListener('keydown', (e) => {
   if (k === 'a' || k === 'ф' || k === 'arrowleft') { keys.a = true; keys.left = true; }
   if (k === 's' || k === 'ы' || k === 'arrowdown') { keys.s = true; keys.down = true; }
   if (k === 'd' || k === 'в' || k === 'arrowright') { keys.d = true; keys.right = true; }
-  
-  // Блокируем скролл страницы стрелками, если мы ходим
-  if (isWalking && ['w','a','s','d','ц','ф','ы','в','arrowup','arrowdown','arrowleft','arrowright'].includes(k)) {
-      e.preventDefault();
-  }
+  if (isWalking && ['w','a','s','d','ц','ф','ы','в','arrowup','arrowdown','arrowleft','arrowright'].includes(k)) e.preventDefault();
 });
 
 window.addEventListener('keyup', (e) => {
@@ -567,22 +663,18 @@ walkBtn.onclick = () => {
     }
     
     playerGroup.visible = true;
-    controls.minDistance = 30; 
-    controls.maxDistance = 100; 
+    controls.minDistance = 30; controls.maxDistance = 100; 
     controls.target.set(playerGroup.position.x, 5, playerGroup.position.z);
     camera.position.set(playerGroup.position.x, 60, playerGroup.position.z + 50); 
-    
     dpad.classList.add('show');
-    // Показываем подсказку для ПК
     pcHint.style.display = 'block';
-    setTimeout(() => pcHint.style.display = 'none', 5000); // Прячем через 5 секунд
+    setTimeout(() => pcHint.style.display = 'none', 5000);
   } else {
     playerGroup.visible = false;
     controls.minDistance = 40; controls.maxDistance = 350;
     controls.target.set(0, 0, 0); camera.position.set(120, 150, 120);
     dpad.classList.remove('show'); moveForward = 0; moveRight = 0;
     pcHint.style.display = 'none';
-    
     gameChannel.send({ type: 'broadcast', event: 'player_leave', payload: { nickname: myHouseNick } });
   }
 };
@@ -596,6 +688,28 @@ const setupBtn = (id, f, r) => {
 };
 setupBtn('btnUp', 1, 0); setupBtn('btnDown', -1, 0); setupBtn('btnLeft', 0, -1); setupBtn('btnRight', 0, 1);
 
+// === КЛИК ПО ДОМАМ (УДАЛЕНИЕ) ===
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  if (!isAdmin) return;
+  
+  mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  const intersects = raycaster.intersectObjects(housesGroup.children, true);
+  
+  if (intersects.length > 0) {
+    let obj = intersects[0].object;
+    while (obj.parent && obj.parent !== housesGroup) obj = obj.parent;
+    if (obj.parent === housesGroup) {
+      if(confirm(`Удалить дом @${obj.userData.nickname}?`)) {
+        db.from('houses').delete().eq('nickname', obj.userData.nickname);
+      }
+    }
+  }
+});
+
 const clock = new THREE.Clock();
 let lastSendTime = 0;
 
@@ -603,7 +717,6 @@ function animate() {
   requestAnimationFrame(animate);
   const delta = clock.getDelta();
   
-  // Вычисляем направление движения (объединяем клавиатуру и джойстик)
   let f = moveForward;
   let r = moveRight;
 
@@ -626,17 +739,11 @@ function animate() {
   }
 
   if (isWalking && myHouseNick) {
-      if (Date.now() - lastSendTime > 100) { // 10 раз в секунду
+      if (Date.now() - lastSendTime > 100) {
           gameChannel.send({
               type: 'broadcast',
               event: 'player_move',
-              payload: {
-                  nickname: myHouseNick,
-                  x: playerGroup.position.x,
-                  y: playerGroup.position.y,
-                  z: playerGroup.position.z,
-                  rotY: playerGroup.rotation.y
-              }
+              payload: { nickname: myHouseNick, x: playerGroup.position.x, y: playerGroup.position.y, z: playerGroup.position.z, rotY: playerGroup.rotation.y }
           });
           lastSendTime = Date.now();
       }
@@ -703,15 +810,8 @@ function animate() {
 
   const isNight = sunHeight < 0.1;
   lamps.forEach(l => { 
-      if (isNight) { 
-          l.bulb.material.color.setHex(0xffdd55); 
-          l.light.intensity = 2; 
-          l.glow.material.opacity = 0.8; 
-      } else { 
-          l.bulb.material.color.setHex(0x555555); 
-          l.light.intensity = 0; 
-          l.glow.material.opacity = 0; 
-      } 
+      if (isNight) { l.bulb.material.color.setHex(0xffdd55); l.light.intensity = 2; l.glow.material.opacity = 0.8; } 
+      else { l.bulb.material.color.setHex(0x555555); l.light.intensity = 0; l.glow.material.opacity = 0; } 
   });
   
   cloudsGroup.children.forEach(c => {
@@ -780,14 +880,18 @@ window.buyUpgrade = async (type) => {
   } else if (type === 'skin_pineapple') {
     if (money < 100) return alert('Недостаточно денег!');
     money -= 100; updateUI();
-    await db.from('houses').update({ skin: 'pineapple' }).eq('nickname', myHouseNick);
+    await db.from('houses').update({ skin: 'pineapple', height_level: 1 }).eq('nickname', myHouseNick);
   } else if (type === 'skin_castle') {
     if (money < 100) return alert('Недостаточно денег!');
     money -= 100; updateUI();
-    await db.from('houses').update({ skin: 'castle' }).eq('nickname', myHouseNick);
+    await db.from('houses').update({ skin: 'castle', height_level: 1 }).eq('nickname', myHouseNick);
   } else if (type === 'skin_default') {
-    await db.from('houses').update({ skin: 'default' }).eq('nickname', myHouseNick);
+    await db.from('houses').update({ skin: 'default', height_level: 1 }).eq('nickname', myHouseNick);
   }
+};
+
+window.shieldAll = async () => {
+  await db.from('houses').update({ has_shield: true }).neq('nickname', 'nobody');
 };
 
 function updateUI() {
@@ -820,9 +924,7 @@ window.addHouses = async () => {
     occupied.add(`${spot.x},${spot.z}`);
     
     const { error } = await db.from('houses').insert({ nickname: nick, x: spot.x, z: spot.z, height_level: 1, has_shield: false, is_dead: false, skin: 'default' });
-    if (error) {
-      alert("Ошибка базы данных: " + error.message); return;
-    }
+    if (error) { alert("Ошибка базы данных: " + error.message); return; }
     added++;
   }
   document.getElementById('nicksInput').value = '';
