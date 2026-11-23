@@ -154,16 +154,18 @@ const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const PASSWORD = 'admin';
 const N = 12;
 const SIZE = 20;
-const DAY_CYCLE_SPEED = 0.01; // Полный цикл за 100 секунд (50 сек день, 50 сек ночь)
+const DAY_CYCLE_SPEED = 0.005; 
 
 let money = parseInt(localStorage.getItem('gameMoney')) || 0;
 let myHouseNick = localStorage.getItem('myHouseNick') || '';
 let isMeteorShower = false;
 let meteorShowerTimer = 0;
 let nextMeteorRealTime = getNextMidnight();
-
-// Сохраняем время в локальной памяти, чтобы оно не сбрасывалось!
 let timeOfDay = parseFloat(localStorage.getItem('gameTime')) || 0.2; 
+
+// Словари для чужих игроков
+const otherPlayers = {};
+const otherPlayersTimeouts = {};
 
 function getNextMidnight() {
   const now = new Date();
@@ -189,7 +191,6 @@ document.getElementById('canvas-container').appendChild(renderer.domElement);
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
-// Ограничиваем камеру, чтобы она не уходила под землю!
 controls.maxPolarAngle = Math.PI / 2.5; 
 controls.target.set(0, 0, 0);
 
@@ -243,8 +244,6 @@ function getGlowTexture() {
   return new THREE.CanvasTexture(canvas);
 }
 const glowTexture = getGlowTexture();
-
-// (Я УБРАЛ ОГРОМНУЮ ЗЕЛЕНУЮ ПЛИТУ, ЧТОБЫ НЕ БЫЛО СТЕН)
 
 // --- ГЕНЕРАЦИЯ КАРТЫ ---
 for (let x = 0; x < N; x++) {
@@ -319,25 +318,31 @@ for (let x = 0; x < N; x++) {
 }
 mapGroup.position.set(-N * SIZE / 2 + SIZE / 2, 0, -N * SIZE / 2 + SIZE / 2);
 
-// === ЧЕЛОВЕЧЕК ===
-const playerGroup = new THREE.Group();
-const pBody = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 5, 8), new THREE.MeshLambertMaterial({color: 0x3498db}));
-pBody.position.y = 5; pBody.castShadow = true; playerGroup.add(pBody);
-const pHead = new THREE.Mesh(new THREE.SphereGeometry(1.5, 16, 16), new THREE.MeshLambertMaterial({color: 0xffcc99}));
-pHead.position.y = 8; pHead.castShadow = true; playerGroup.add(pHead);
-const legGeo = new THREE.CylinderGeometry(0.5, 0.5, 3, 6);
-const legMat = new THREE.MeshLambertMaterial({color: 0x2c3e50});
-const leftLeg = new THREE.Mesh(legGeo, legMat); leftLeg.position.set(-0.6, 1.5, 0); playerGroup.add(leftLeg);
-const rightLeg = new THREE.Mesh(legGeo, legMat); rightLeg.position.set(0.6, 1.5, 0); playerGroup.add(rightLeg);
-const armGeo = new THREE.CylinderGeometry(0.4, 0.4, 2.5, 6);
-const armMat = new THREE.MeshLambertMaterial({color: 0xffcc99});
-const leftArm = new THREE.Mesh(armGeo, armMat); leftArm.position.set(-1.8, 5.5, 0); leftArm.rotation.z = 0.3; playerGroup.add(leftArm);
-const rightArm = new THREE.Mesh(armGeo, armMat); rightArm.position.set(1.8, 5.5, 0); rightArm.rotation.z = -0.3; playerGroup.add(rightArm);
+// === ФУНКЦИЯ СОЗДАНИЯ ЧЕЛОВЕЧКА ===
+function createPlayerModel(bodyColor) {
+    const group = new THREE.Group();
+    const pBody = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 5, 8), new THREE.MeshLambertMaterial({color: bodyColor}));
+    pBody.position.y = 5; pBody.castShadow = true; group.add(pBody);
+    const pHead = new THREE.Mesh(new THREE.SphereGeometry(1.5, 16, 16), new THREE.MeshLambertMaterial({color: 0xffcc99}));
+    pHead.position.y = 8; pHead.castShadow = true; group.add(pHead);
+    const legGeo = new THREE.CylinderGeometry(0.5, 0.5, 3, 6);
+    const legMat = new THREE.MeshLambertMaterial({color: 0x2c3e50});
+    const leftLeg = new THREE.Mesh(legGeo, legMat); leftLeg.position.set(-0.6, 1.5, 0); group.add(leftLeg);
+    const rightLeg = new THREE.Mesh(legGeo, legMat); rightLeg.position.set(0.6, 1.5, 0); group.add(rightLeg);
+    const armGeo = new THREE.CylinderGeometry(0.4, 0.4, 2.5, 6);
+    const armMat = new THREE.MeshLambertMaterial({color: 0xffcc99});
+    const leftArm = new THREE.Mesh(armGeo, armMat); leftArm.position.set(-1.8, 5.5, 0); leftArm.rotation.z = 0.3; group.add(leftArm);
+    const rightArm = new THREE.Mesh(armGeo, armMat); rightArm.position.set(1.8, 5.5, 0); rightArm.rotation.z = -0.3; group.add(rightArm);
+    return group;
+}
+
+// Мой персонаж (синий)
+const playerGroup = createPlayerModel(0x3498db);
 playerGroup.visible = false;
 scene.add(playerGroup); 
 
 // --- ДОМА ---
-function createNametag(text) {
+function createNametag(text, yPos = 12) {
   const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
   canvas.width = 256; canvas.height = 64;
   ctx.fillStyle = '#f5e6a3'; ctx.fillRect(0, 0, 256, 64);
@@ -345,13 +350,13 @@ function createNametag(text) {
   ctx.fillText(text, 128, 32);
   const texture = new THREE.CanvasTexture(canvas);
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false }));
-  sprite.scale.set(14, 3.5, 1); sprite.position.y = 12;
+  sprite.scale.set(14, 3.5, 1); sprite.position.y = yPos;
   return sprite;
 }
 
 function createHouseModel(skin) {
     const g = new THREE.Group();
-    const windowMat = new THREE.MeshBasicMaterial({ color: 0xffeeaa }); // Окна светятся
+    const windowMat = new THREE.MeshBasicMaterial({ color: 0xffeeaa }); 
     const doorMat = new THREE.MeshLambertMaterial({ color: 0x5c3a21 });
 
     if (skin === 'pineapple') {
@@ -477,6 +482,56 @@ db.channel('meteors')
   .on('broadcast', { event: 'shower' }, payload => { if (!isMeteorShower) triggerMeteorShower(true); })
   .subscribe();
 
+// === СИНХРОНИЗАЦИЯ ИГРОКОВ ===
+const gameChannel = db.channel('game_channel');
+
+gameChannel
+  .on('broadcast', { event: 'player_move' }, payload => {
+      const data = payload.payload; 
+      if (data.nickname === myHouseNick) return; // Себя не рисуем
+      
+      let p = otherPlayers[data.nickname];
+      if (!p) {
+          // Создаем нового красного человечка для другого игрока
+          p = createPlayerModel(0xe74c3c); 
+          p.position.set(data.x, data.y, data.z);
+          p.rotation.y = data.rotY;
+          
+          const tag = createNametag(data.nickname, 10);
+          tag.scale.set(10, 2.5, 1);
+          p.add(tag);
+          
+          scene.add(p);
+          otherPlayers[data.nickname] = p;
+          p.userData.target = new THREE.Vector3(data.x, data.y, data.z);
+          p.userData.targetRotY = data.rotY;
+      } else {
+          // Обновляем цель (для плавного движения)
+          if(!p.userData.target) p.userData.target = new THREE.Vector3();
+          p.userData.target.set(data.x, data.y, data.z);
+          p.userData.targetRotY = data.rotY;
+      }
+      
+      // Сбрасываем таймер удаления
+      if (otherPlayersTimeouts[data.nickname]) clearTimeout(otherPlayersTimeouts[data.nickname]);
+      otherPlayersTimeouts[data.nickname] = setTimeout(() => {
+          scene.remove(p);
+          delete otherPlayers[data.nickname];
+          delete otherPlayersTimeouts[data.nickname];
+      }, 3000); // Если 3 сек нет пингов - удаляем
+  })
+  .on('broadcast', { event: 'player_leave' }, payload => {
+      const nickname = payload.payload.nickname;
+      if (otherPlayers[nickname]) {
+          scene.remove(otherPlayers[nickname]);
+          delete otherPlayers[nickname];
+          if (otherPlayersTimeouts[nickname]) clearTimeout(otherPlayersTimeouts[nickname]);
+          delete otherPlayersTimeouts[nickname];
+      }
+  })
+  .subscribe();
+
+// --- УПРАВЛЕНИЕ ХОДЬБОЙ ---
 let isWalking = false, moveForward = 0, moveRight = 0;
 const dpad = document.getElementById('dpad'), walkBtn = document.getElementById('walkBtn');
 
@@ -494,7 +549,6 @@ walkBtn.onclick = () => {
     
     playerGroup.visible = true;
     
-    // Настраиваем камеру для ходьбы
     controls.minDistance = 30; 
     controls.maxDistance = 100; 
     controls.target.set(playerGroup.position.x, 5, playerGroup.position.z);
@@ -506,6 +560,9 @@ walkBtn.onclick = () => {
     controls.minDistance = 40; controls.maxDistance = 350;
     controls.target.set(0, 0, 0); camera.position.set(120, 150, 120);
     dpad.classList.remove('show'); moveForward = 0; moveRight = 0;
+    
+    // Сообщаем всем, что мы вышли
+    gameChannel.send({ type: 'broadcast', event: 'player_leave', payload: { nickname: myHouseNick } });
   }
 };
 
@@ -519,24 +576,51 @@ const setupBtn = (id, f, r) => {
 setupBtn('btnUp', 1, 0); setupBtn('btnDown', -1, 0); setupBtn('btnLeft', 0, -1); setupBtn('btnRight', 0, 1);
 
 const clock = new THREE.Clock();
+let lastSendTime = 0;
 
 function animate() {
   requestAnimationFrame(animate);
   const delta = clock.getDelta();
   
+  // Движение моего персонажа
   if (isWalking && (moveForward !== 0 || moveRight !== 0)) {
     const moveSpeed = 0.6;
     const forward = new THREE.Vector3(); camera.getWorldDirection(forward); forward.y = 0; forward.normalize();
     const right = new THREE.Vector3(); right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
     const moveDelta = new THREE.Vector3().addScaledVector(forward, moveForward * moveSpeed).addScaledVector(right, moveRight * moveSpeed);
     
-    // Двигаем игрока
     playerGroup.position.add(moveDelta);
     if (moveDelta.length() > 0) playerGroup.rotation.y = Math.atan2(moveDelta.x, moveDelta.z);
     
-    // Камера плавно летит за игроком (исправлено!)
     controls.target.add(moveDelta);
     camera.position.add(moveDelta); 
+  }
+
+  // Отправка координат на сервер (если ходим)
+  if (isWalking && myHouseNick) {
+      if (Date.now() - lastSendTime > 100) { // 10 раз в секунду
+          gameChannel.send({
+              type: 'broadcast',
+              event: 'player_move',
+              payload: {
+                  nickname: myHouseNick,
+                  x: playerGroup.position.x,
+                  y: playerGroup.position.y,
+                  z: playerGroup.position.z,
+                  rotY: playerGroup.rotation.y
+              }
+          });
+          lastSendTime = Date.now();
+      }
+  }
+
+  // Плавное движение чужих игроков
+  for (const nick in otherPlayers) {
+      const p = otherPlayers[nick];
+      if (p.userData.target) {
+          p.position.lerp(p.userData.target, 0.2); // Плавно скользим
+          p.rotation.y = p.userData.targetRotY;
+      }
   }
 
   if (!isMeteorShower) {
@@ -553,9 +637,9 @@ function animate() {
     document.getElementById('meteorTimer').innerText = `☄️ ДОЖДЬ: ${Math.ceil(meteorShowerTimer)}с!`;
   }
 
-  // === СМЕНА ДНЯ И НОЧИ (ИСПРАВЛЕНО) ===
+  // === СМЕНА ДНЯ И НОЧИ ===
   timeOfDay = (timeOfDay + delta * DAY_CYCLE_SPEED) % 1.0;
-  localStorage.setItem('gameTime', timeOfDay); // Сохраняем время
+  localStorage.setItem('gameTime', timeOfDay); 
   
   const sunAngle = timeOfDay * Math.PI * 2;
   const sunHeight = Math.sin(sunAngle); 
@@ -567,14 +651,12 @@ function animate() {
   const timeEl = document.getElementById('timeStatus');
   
   if (sunHeight > 0.1) {
-      // ДЕНЬ
       sunLight.intensity = Math.min(1.5, sunHeight * 2.5);
       ambientLight.intensity = 0.6;
       currentBgColor.copy(dayColor);
       scene.fog.density = 0;
       timeEl.innerText = '☀️ День';
   } else if (sunHeight > -0.1) {
-      // ЗАКАТ
       sunLight.intensity = Math.max(0, sunHeight * 2);
       ambientLight.intensity = 0.4;
       const t = (sunHeight + 0.1) / 0.2; 
@@ -582,19 +664,17 @@ function animate() {
       scene.fog.density = 0.001;
       timeEl.innerText = '🌅 Закат/Рассвет';
   } else {
-      // НОЧЬ
       sunLight.intensity = 0; 
-      ambientLight.intensity = 0.3; // Луна светит
-      ambientLight.color.setHex(0x556699); // Синеватый свет
+      ambientLight.intensity = 0.3; 
+      ambientLight.color.setHex(0x556699); 
       currentBgColor.copy(nightColor);
-      scene.fog.density = 0.0015; // Легкий туман
+      scene.fog.density = 0.0015; 
       timeEl.innerText = '🌙 Ночь';
   }
   
   scene.background.copy(currentBgColor);
   scene.fog.color.copy(currentBgColor);
 
-  // Фонари
   const isNight = sunHeight < 0.1;
   lamps.forEach(l => { 
       if (isNight) { 
