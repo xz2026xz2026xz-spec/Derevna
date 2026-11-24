@@ -116,6 +116,23 @@
   #btnUp { grid-column: 2; grid-row: 1; } #btnLeft { grid-column: 1; grid-row: 2; }
   #btnDown { grid-column: 2; grid-row: 3; } #btnRight { grid-column: 3; grid-row: 2; }
 
+
+  #buildBar {
+    position: absolute; bottom: 10px; left: 88px; right: 88px; z-index: 25;
+    display: none; flex-direction: column; align-items: center; gap: 5px;
+    background: rgba(0,0,0,0.55); padding: 6px; border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.2); backdrop-filter: blur(5px);
+  }
+  #buildBar.show { display: flex; }
+  .bb-row { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; align-items: center; }
+  .bb-btn { width: 30px; height: 30px; border-radius: 8px; border: 2px solid transparent; background: #26262f; color: white; font-size: 15px; cursor: pointer; display: flex; align-items: center; justify-content: center; touch-action: manipulation; }
+  .bb-btn.active { background: #27ae60; border-color: #2ecc71; }
+  #lvlLabel { color: white; font-size: 12px; font-weight: bold; min-width: 34px; text-align: center; }
+  #swatches { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; }
+  .sw { width: 26px; height: 26px; border-radius: 6px; border: 2px solid rgba(255,255,255,0.4); cursor: pointer; touch-action: manipulation; }
+  .sw.sel { border-color: #fff; box-shadow: 0 0 0 2px #27ae60; transform: scale(1.1); }
+  #adminHead { display: flex; justify-content: space-between; align-items: center; }
+  #adminPanel button.closeX { width: 36px; height: 36px; padding: 0; background: #444; font-size: 16px; }
   .modal { position: absolute; inset: 0; background: rgba(0,0,0,0.7); z-index: 40; display: none; align-items: center; justify-content: center; backdrop-filter: blur(3px); }
   .modal.show { display: flex; }
   .box { background: #1e1e28; padding: 25px; border-radius: 16px; color: white; width: 90%; max-width: 340px; border: 1px solid #333; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
@@ -215,7 +232,7 @@
 </div>
 
 <div id="adminPanel">
-  <h3>🔐 Админ-панель</h3>
+  <div id="adminHead"><h3>🔐 Админ-панель</h3><button class="closeX" onclick="closeAdminPanel()">✖</button></div>
   <p style="font-size:12px; color:#aaa;">Ники подписчиков (через Enter):</p>
   <textarea id="nicksInput" placeholder="Tima&#10;vika_pro"></textarea>
   <button onclick="addHouses()">➕ Добавить</button>
@@ -225,8 +242,23 @@
   <button class="blue" onclick="shieldAll()">🛡️ Выдать щиты всем</button>
   <button class="red" onclick="clearAll()">🗑 Удалить все дома</button>
   <button class="red" onclick="triggerMeteor()">☄️ Вызвать метеориты</button>
+  <hr>
+  <p style="font-size:12px; color:#aaa;">🧊 Кубики: внизу экрана панель (👆 выкл, ➕ ставить, ➖ убирать, ▲▼ высота, цвета). Панель можно закрыть крестиком — админ-режим останется.</p>
+  <button class="red" onclick="clearBlocks()">🧊 Удалить все кубики</button>
   
   <button class="gray" onclick="logout()" style="margin-top:auto;">Выйти</button>
+</div>
+
+<div id="buildBar">
+  <div class="bb-row">
+    <button class="bb-btn active" id="modeOff" title="Без кубиков (удаление домов)">👆</button>
+    <button class="bb-btn" id="modeAdd" title="Ставить кубики">➕</button>
+    <button class="bb-btn" id="modeDel" title="Убирать кубики">➖</button>
+    <button class="bb-btn" id="lvlDown">▼</button>
+    <span id="lvlLabel">выс 0</span>
+    <button class="bb-btn" id="lvlUp">▲</button>
+  </div>
+  <div id="swatches"></div>
 </div>
 
 <div id="canvas-container"></div>
@@ -793,7 +825,7 @@ setupBtn('btnUp', 'up'); setupBtn('btnDown', 'down'); setupBtn('btnLeft', 'left'
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 renderer.domElement.addEventListener('pointerdown', (e) => {
-  if (!isAdmin) return;
+  if (!isAdmin || buildMode !== 'off') return;
   
   mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
   mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
@@ -809,6 +841,151 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
       }
     }
   }
+});
+
+
+// === КУБИКИ (админ) ===
+const BLOCK = 3;            // размер кубика
+const GROUND_TOP = 0.5;     // верх травы
+const BLOCK_COLORS = [
+  ['Красный', '#e74c3c'], ['Оранжевый', '#e67e22'], ['Жёлтый', '#f1c40f'], ['Зелёный', '#2ecc71'],
+  ['Голубой', '#00bcd4'], ['Синий', '#2d5be3'], ['Фиолетовый', '#8e44ad'],
+  ['Чёрный', '#111111'], ['Серый', '#808080'], ['Коричневый', '#8b5a2b']
+];
+const blocksGroup = new THREE.Group(); mapGroup.add(blocksGroup);
+const blocksMap = new Map();
+const blockGeo = new THREE.BoxGeometry(BLOCK, BLOCK, BLOCK);
+const blockMats = {};
+function blockMat(c) { return blockMats[c] || (blockMats[c] = new THREE.MeshLambertMaterial({ color: c })); }
+let buildMode = 'off';   // off | add | del
+let buildLevel = 0;
+let buildColor = BLOCK_COLORS[0][1];
+let blocksDbOk = true, blocksWarned = false;
+const BLOCKS_LS = 'gameBlocks';
+const bKey = (x, y, z) => x + '_' + y + '_' + z;
+
+function addBlockMesh(x, y, z, color) {
+  const key = bKey(x, y, z);
+  const old = blocksMap.get(key);
+  if (old) { old.material = blockMat(color); old.userData.color = color; return old; }
+  const m = new THREE.Mesh(blockGeo, blockMat(color));
+  m.position.set(x * BLOCK, GROUND_TOP + BLOCK * (y + 0.5), z * BLOCK);
+  m.castShadow = true; m.receiveShadow = true;
+  m.userData = { key, cell: { x, y, z }, color };
+  blocksGroup.add(m); blocksMap.set(key, m);
+  return m;
+}
+function removeBlockMesh(key) {
+  const m = blocksMap.get(key);
+  if (m) { blocksGroup.remove(m); blocksMap.delete(key); }
+}
+function saveLocalBlocks() {
+  try {
+    localStorage.setItem(BLOCKS_LS, JSON.stringify([...blocksMap.values()].map(m => ({ x: m.userData.cell.x, y: m.userData.cell.y, z: m.userData.cell.z, color: m.userData.color }))));
+  } catch (e) {}
+}
+function blocksDbFailed(err) {
+  blocksDbOk = false; saveLocalBlocks();
+  console.warn('blocks table error:', err && err.message);
+  if (!blocksWarned) { blocksWarned = true; alert('Таблица blocks в Supabase не найдена — кубики сохраняются только на этом устройстве. Выполни SQL из инструкции, чтобы они сохранялись для всех.'); }
+}
+async function loadBlocks() {
+  const { data, error } = await db.from('blocks').select('*');
+  [...blocksGroup.children].forEach(m => blocksGroup.remove(m)); blocksMap.clear();
+  if (error) {
+    blocksDbOk = false;
+    try { JSON.parse(localStorage.getItem(BLOCKS_LS) || '[]').forEach(b => addBlockMesh(b.x, b.y, b.z, b.color)); } catch (e) {}
+    return;
+  }
+  blocksDbOk = true;
+  data.forEach(b => addBlockMesh(b.x, b.y, b.z, b.color));
+  saveLocalBlocks();
+}
+async function placeBlock(x, y, z, color) {
+  addBlockMesh(x, y, z, color); saveLocalBlocks();
+  if (blocksDbOk) {
+    const { error } = await db.from('blocks').upsert({ id: bKey(x, y, z), x, y, z, color });
+    if (error) blocksDbFailed(error);
+  }
+}
+async function deleteBlock(key) {
+  removeBlockMesh(key); saveLocalBlocks();
+  if (blocksDbOk) {
+    const { error } = await db.from('blocks').delete().eq('id', key);
+    if (error) blocksDbFailed(error);
+  }
+}
+window.clearBlocks = async () => {
+  if (!confirm('Удалить ВСЕ кубики?')) return;
+  [...blocksGroup.children].forEach(m => blocksGroup.remove(m)); blocksMap.clear(); saveLocalBlocks();
+  if (blocksDbOk) {
+    const { error } = await db.from('blocks').delete().neq('id', 'nobody');
+    if (error) blocksDbFailed(error);
+  }
+};
+
+db.channel('public:blocks')
+  .on('postgres_changes', { event: '*', schema: 'public', table: 'blocks' }, payload => {
+    if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') addBlockMesh(payload.new.x, payload.new.y, payload.new.z, payload.new.color);
+    else if (payload.eventType === 'DELETE' && payload.old && payload.old.id) removeBlockMesh(payload.old.id);
+  }).subscribe();
+loadBlocks();
+
+// --- интерфейс кубиков ---
+const buildBar = document.getElementById('buildBar');
+const swWrap = document.getElementById('swatches');
+BLOCK_COLORS.forEach(([name, c], i) => {
+  const d = document.createElement('div');
+  d.className = 'sw' + (i === 0 ? ' sel' : ''); d.style.background = c; d.title = name;
+  d.addEventListener('click', () => {
+    buildColor = c;
+    swWrap.querySelectorAll('.sw').forEach(e => e.classList.remove('sel')); d.classList.add('sel');
+    if (buildMode === 'off') setBuildMode('add');
+  });
+  swWrap.appendChild(d);
+});
+function setBuildMode(m) {
+  buildMode = m;
+  document.getElementById('modeOff').classList.toggle('active', m === 'off');
+  document.getElementById('modeAdd').classList.toggle('active', m === 'add');
+  document.getElementById('modeDel').classList.toggle('active', m === 'del');
+}
+function setLevel(n) { buildLevel = Math.max(0, Math.min(40, n)); document.getElementById('lvlLabel').innerText = 'выс ' + buildLevel; }
+document.getElementById('modeOff').onclick = () => setBuildMode('off');
+document.getElementById('modeAdd').onclick = () => setBuildMode('add');
+document.getElementById('modeDel').onclick = () => setBuildMode('del');
+document.getElementById('lvlUp').onclick = () => setLevel(buildLevel + 1);
+document.getElementById('lvlDown').onclick = () => setLevel(buildLevel - 1);
+
+function handleBuildTap(e) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouse.set(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
+  raycaster.setFromCamera(mouse, camera);
+  const hits = raycaster.intersectObjects(blocksGroup.children, false);
+  if (buildMode === 'del') { if (hits.length) deleteBlock(hits[0].object.userData.key); return; }
+  let cell;
+  if (hits.length) {
+    const h = hits[0], c = h.object.userData.cell, n = h.face.normal;
+    cell = { x: c.x + Math.round(n.x), y: c.y + Math.round(n.y), z: c.z + Math.round(n.z) };
+  } else {
+    const worldY = GROUND_TOP + BLOCK * (buildLevel + 0.5) + mapGroup.position.y;
+    const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -worldY);
+    const pt = new THREE.Vector3();
+    if (!raycaster.ray.intersectPlane(plane, pt)) return;
+    mapGroup.worldToLocal(pt);
+    cell = { x: Math.round(pt.x / BLOCK), y: buildLevel, z: Math.round(pt.z / BLOCK) };
+  }
+  if (cell.y < 0 || cell.y > 60 || Math.abs(cell.x) > 400 || Math.abs(cell.z) > 400) return;
+  if (blocksMap.has(bKey(cell.x, cell.y, cell.z))) return;
+  placeBlock(cell.x, cell.y, cell.z, buildColor);
+}
+let tapStart = null;
+renderer.domElement.addEventListener('pointerdown', (e) => { tapStart = { x: e.clientX, y: e.clientY, t: performance.now(), id: e.pointerId }; });
+renderer.domElement.addEventListener('pointerup', (e) => {
+  if (!tapStart || !isAdmin || buildMode === 'off') { tapStart = null; return; }
+  const ok = e.pointerId === tapStart.id && Math.hypot(e.clientX - tapStart.x, e.clientY - tapStart.y) < 8 && performance.now() - tapStart.t < 500;
+  tapStart = null;
+  if (ok) handleBuildTap(e);
 });
 
 const clock = new THREE.Clock();
@@ -1024,10 +1201,11 @@ document.getElementById('shopBtn').onclick = openShop;
 document.getElementById('adminBtn').onclick = () => { if (!isAdmin) document.getElementById('loginModal').classList.add('show'); else document.getElementById('adminPanel').classList.toggle('open'); };
 window.closeModal = (id) => document.getElementById(id).classList.remove('show');
 window.checkPass = () => {
-  if (document.getElementById('passInput').value === PASSWORD) { isAdmin = true; closeModal('loginModal'); document.getElementById('adminPanel').classList.add('open'); document.getElementById('adminBtn').classList.add('on'); } 
+  if (document.getElementById('passInput').value === PASSWORD) { isAdmin = true; closeModal('loginModal'); document.getElementById('adminPanel').classList.add('open'); document.getElementById('adminBtn').classList.add('on'); buildBar.classList.add('show'); } 
   else alert('Неверный пароль!');
 };
-window.logout = () => { isAdmin = false; document.getElementById('adminPanel').classList.remove('open'); document.getElementById('adminBtn').classList.remove('on'); };
+window.closeAdminPanel = () => document.getElementById('adminPanel').classList.remove('open');
+window.logout = () => { isAdmin = false; setBuildMode('off'); buildBar.classList.remove('show'); document.getElementById('adminPanel').classList.remove('open'); document.getElementById('adminBtn').classList.remove('on'); };
 window.triggerMeteor = () => triggerMeteorShower(false);
 
 window.addHouses = async () => {
