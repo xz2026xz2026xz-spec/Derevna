@@ -740,7 +740,8 @@ const keys = { w: false, a: false, s: false, d: false, up: false, down: false, l
 
 // Функция прыжка
 function doJump() {
-    if (isWalking && playerGroup.position.y <= 0.1) {
+    const pp = playerGroup.position;
+    if (isWalking && jumpVelocity === 0 && pp.y <= groundHeightAt(pp.x, pp.y, pp.z) + 0.1) {
         jumpVelocity = 0.8; // Сила прыжка
     }
 }
@@ -988,6 +989,36 @@ renderer.domElement.addEventListener('pointerup', (e) => {
   if (ok) handleBuildTap(e);
 });
 
+
+// === СТОЛКНОВЕНИЯ С КУБИКАМИ ===
+const PLAYER_R = 1.2, PLAYER_H = 9;
+function playerCollides(wx, wy, wz) {
+  if (blocksMap.size === 0) return false;
+  const lx = wx - mapGroup.position.x, lz = wz - mapGroup.position.z, ly = wy - mapGroup.position.y;
+  const x0 = Math.floor((lx - PLAYER_R) / BLOCK + 0.5), x1 = Math.floor((lx + PLAYER_R) / BLOCK + 0.5);
+  const z0 = Math.floor((lz - PLAYER_R) / BLOCK + 0.5), z1 = Math.floor((lz + PLAYER_R) / BLOCK + 0.5);
+  const y0 = Math.floor((ly + 0.02) / BLOCK), y1 = Math.floor((ly + PLAYER_H - 0.02) / BLOCK);
+  for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) for (let y = Math.max(0, y0); y <= y1; y++) {
+    if (blocksMap.has(bKey(x, y, z))) return true;
+  }
+  return false;
+}
+// высота пола под ногами (0 = земля, иначе верх самого высокого кубика под игроком)
+function groundHeightAt(wx, wy, wz) {
+  if (blocksMap.size === 0) return 0;
+  const lx = wx - mapGroup.position.x, lz = wz - mapGroup.position.z, ly = wy - mapGroup.position.y;
+  const x0 = Math.floor((lx - PLAYER_R) / BLOCK + 0.5), x1 = Math.floor((lx + PLAYER_R) / BLOCK + 0.5);
+  const z0 = Math.floor((lz - PLAYER_R) / BLOCK + 0.5), z1 = Math.floor((lz + PLAYER_R) / BLOCK + 0.5);
+  const startY = Math.floor((ly + 0.05) / BLOCK) - 1;
+  let best = 0;
+  for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) {
+    for (let y = startY; y >= 0; y--) {
+      if (blocksMap.has(bKey(x, y, z))) { best = Math.max(best, (y + 1) * BLOCK); break; }
+    }
+  }
+  return best;
+}
+
 const clock = new THREE.Clock();
 let lastSendTime = 0;
 
@@ -1010,27 +1041,39 @@ function animate() {
     const right = new THREE.Vector3(); right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
     const moveDelta = new THREE.Vector3().addScaledVector(forward, f * moveSpeed).addScaledVector(right, r * moveSpeed);
     
-    playerGroup.position.x += moveDelta.x;
-    playerGroup.position.z += moveDelta.z;
+    const px = playerGroup.position.x, py = playerGroup.position.y, pz = playerGroup.position.z;
+    const stuck = playerCollides(px, py, pz);
+    let nx = px + moveDelta.x;
+    if (!stuck && playerCollides(nx, py, pz)) nx = px;
+    let nz = pz + moveDelta.z;
+    if (!stuck && playerCollides(nx, py, nz)) nz = pz;
+    const ax = nx - px, az = nz - pz;
+    playerGroup.position.x = nx;
+    playerGroup.position.z = nz;
     
     if (moveDelta.length() > 0) playerGroup.rotation.y = Math.atan2(moveDelta.x, moveDelta.z);
     
-    controls.target.x += moveDelta.x;
-    controls.target.z += moveDelta.z;
-    camera.position.x += moveDelta.x; 
-    camera.position.z += moveDelta.z; 
+    controls.target.x += ax;
+    controls.target.z += az;
+    camera.position.x += ax; 
+    camera.position.z += az; 
   }
 
   // Физика прыжка (Y)
   if (isWalking) {
-      if (jumpVelocity !== 0 || playerGroup.position.y > 0) {
+      const gp = playerGroup.position;
+      const floorY = groundHeightAt(gp.x, gp.y, gp.z);
+      if (jumpVelocity !== 0 || gp.y > floorY + 0.001) {
           jumpVelocity -= GRAVITY; // Гравитация тянет вниз
-          playerGroup.position.y += jumpVelocity; // Меняем высоту
-          
-          if (playerGroup.position.y <= 0) {
-              playerGroup.position.y = 0; // Приземлились
+          let ny = gp.y + jumpVelocity; // Меняем высоту
+          if (jumpVelocity > 0 && playerCollides(gp.x, ny, gp.z) && !playerCollides(gp.x, gp.y, gp.z)) {
+              jumpVelocity = 0; ny = gp.y; // ударились головой о кубик
+          }
+          if (ny <= floorY) {
+              ny = floorY; // Приземлились (на землю или на кубик)
               jumpVelocity = 0;
           }
+          gp.y = ny;
       }
   }
 
