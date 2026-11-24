@@ -225,7 +225,8 @@
 <div id="loginModal" class="modal">
   <div class="box">
     <h3>Вход для админа</h3>
-    <input type="password" id="passInput" placeholder="Пароль" style="width:100%; padding:12px; margin-bottom:15px; border-radius:8px; border:none; background:#101015; color:white; text-align:center;">
+    <input type="email" id="emailInput" placeholder="Email админа" autocomplete="username" style="width:100%; padding:12px; margin-bottom:10px; border-radius:8px; border:none; background:#101015; color:white; text-align:center;">
+    <input type="password" id="passInput" placeholder="Пароль" autocomplete="current-password" style="width:100%; padding:12px; margin-bottom:15px; border-radius:8px; border:none; background:#101015; color:white; text-align:center;">
     <button class="btn-buy" onclick="checkPass()">Войти</button>
     <button class="btn-close" onclick="closeModal('loginModal')">Отмена</button>
   </div>
@@ -271,7 +272,6 @@ const SUPABASE_URL = 'https://ajslzsjdzczkjlguouxd.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_murTt1Egt-me5AZNAcht2g_3UxBef8i';
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-const PASSWORD = 'admin';
 const N = 12;
 const SIZE = 20;
 const DAY_CYCLE_SPEED = 0.005; 
@@ -1243,12 +1243,28 @@ setInterval(() => { money += 10; updateUI(); }, 60000);
 document.getElementById('shopBtn').onclick = openShop;
 document.getElementById('adminBtn').onclick = () => { if (!isAdmin) document.getElementById('loginModal').classList.add('show'); else document.getElementById('adminPanel').classList.toggle('open'); };
 window.closeModal = (id) => document.getElementById(id).classList.remove('show');
-window.checkPass = () => {
-  if (document.getElementById('passInput').value === PASSWORD) { isAdmin = true; closeModal('loginModal'); document.getElementById('adminPanel').classList.add('open'); document.getElementById('adminBtn').classList.add('on'); buildBar.classList.add('show'); } 
-  else alert('Неверный пароль!');
+function enterAdminUI(openPanel) {
+  isAdmin = true; closeModal('loginModal');
+  if (openPanel) document.getElementById('adminPanel').classList.add('open');
+  document.getElementById('adminBtn').classList.add('on'); buildBar.classList.add('show');
+}
+window.checkPass = async () => {
+  const email = document.getElementById('emailInput').value.trim();
+  const password = document.getElementById('passInput').value;
+  if (!email || !password) { alert('Введи email и пароль'); return; }
+  const { error } = await db.auth.signInWithPassword({ email, password });
+  if (error) { alert('Не удалось войти: ' + error.message); return; }
+  document.getElementById('passInput').value = '';
+  enterAdminUI(true);
 };
 window.closeAdminPanel = () => document.getElementById('adminPanel').classList.remove('open');
-window.logout = () => { isAdmin = false; setBuildMode('off'); buildBar.classList.remove('show'); document.getElementById('adminPanel').classList.remove('open'); document.getElementById('adminBtn').classList.remove('on'); };
+window.logout = async () => {
+  await db.auth.signOut();
+  isAdmin = false; setBuildMode('off'); buildBar.classList.remove('show');
+  document.getElementById('adminPanel').classList.remove('open'); document.getElementById('adminBtn').classList.remove('on');
+};
+// если админ уже входил раньше — сессия сохраняется
+db.auth.getSession().then(({ data }) => { if (data && data.session) enterAdminUI(false); });
 window.triggerMeteor = () => triggerMeteorShower(false);
 
 window.addHouses = async () => {
