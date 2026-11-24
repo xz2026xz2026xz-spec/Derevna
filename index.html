@@ -112,6 +112,7 @@
     border-radius: 10px; font-size: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center;
   }
   #dpad button:active { background: #27ae60; border-color: #2ecc71; }
+  .btn, #dpad button { touch-action: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
   #btnUp { grid-column: 2; grid-row: 1; } #btnLeft { grid-column: 1; grid-row: 2; }
   #btnDown { grid-column: 2; grid-row: 3; } #btnRight { grid-column: 3; grid-row: 2; }
 
@@ -736,7 +737,8 @@ window.addEventListener('keyup', (e) => {
   if (k === 'd' || k === 'в' || k === 'arrowright') { keys.d = false; keys.right = false; }
 });
 
-jumpBtn.onclick = doJump;
+jumpBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); doJump(); });
+jumpBtn.addEventListener('contextmenu', (e) => e.preventDefault());
 
 walkBtn.onclick = () => {
   isWalking = !isWalking; walkBtn.classList.toggle('active', isWalking);
@@ -762,21 +764,30 @@ walkBtn.onclick = () => {
     playerGroup.visible = false;
     controls.minDistance = 40; controls.maxDistance = 350;
     controls.target.set(0, 0, 0); camera.position.set(120, 150, 120);
-    dpad.classList.remove('show'); moveForward = 0; moveRight = 0;
+    dpad.classList.remove('show'); resetDpad();
     jumpBtn.style.display = 'none'; // Прячем кнопку прыжка
     pcHint.style.display = 'none';
     gameChannel.send({ type: 'broadcast', event: 'player_leave', payload: { nickname: myHouseNick } });
   }
 };
 
-const setupBtn = (id, f, r) => {
+const dpadState = { up: false, down: false, left: false, right: false };
+function updateDpad() {
+  moveForward = (dpadState.up ? 1 : 0) - (dpadState.down ? 1 : 0);
+  moveRight = (dpadState.right ? 1 : 0) - (dpadState.left ? 1 : 0);
+}
+function resetDpad() { for (const k in dpadState) dpadState[k] = false; updateDpad(); }
+const setupBtn = (id, dir) => {
   const el = document.getElementById(id);
-  const start = (e) => { e.preventDefault(); moveForward = f; moveRight = r; };
-  const end = (e) => { e.preventDefault(); moveForward = 0; moveRight = 0; };
-  el.addEventListener('mousedown', start); el.addEventListener('mouseup', end); el.addEventListener('mouseleave', end);
-  el.addEventListener('touchstart', start, {passive: false}); el.addEventListener('touchend', end); el.addEventListener('touchcancel', end);
+  const start = (e) => { e.preventDefault(); dpadState[dir] = true; updateDpad(); };
+  const end = (e) => { e.preventDefault(); dpadState[dir] = false; updateDpad(); };
+  el.addEventListener('pointerdown', start);
+  el.addEventListener('pointerup', end);
+  el.addEventListener('pointercancel', end);
+  el.addEventListener('lostpointercapture', end);
+  el.addEventListener('contextmenu', (e) => e.preventDefault());
 };
-setupBtn('btnUp', 1, 0); setupBtn('btnDown', -1, 0); setupBtn('btnLeft', 0, -1); setupBtn('btnRight', 0, 1);
+setupBtn('btnUp', 'up'); setupBtn('btnDown', 'down'); setupBtn('btnLeft', 'left'); setupBtn('btnRight', 'right');
 
 // === КЛИК ПО ДОМАМ (УДАЛЕНИЕ) ===
 const raycaster = new THREE.Raycaster();
