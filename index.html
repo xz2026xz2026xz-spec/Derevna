@@ -21,17 +21,35 @@
   
   #netStatus { 
     position: absolute; top: 120px; left: 16px; z-index: 10; 
-    font-size: 12px; color: #2ecc71; font-weight: bold; 
-    background: rgba(0,0,0,0.5); padding: 4px 8px; border-radius: 6px;
-    max-width: 250px; line-height: 1.3; backdrop-filter: blur(5px);
+    font-size: 13px; color: #2ecc71; font-weight: bold; 
+    background: rgba(0,0,0,0.5); padding: 6px 12px; border-radius: 8px;
+    line-height: 1.3; backdrop-filter: blur(5px); cursor: pointer;
+    border: 1px solid rgba(46, 204, 113, 0.3);
+    transition: all 0.2s;
   }
+  #netStatus:hover { background: rgba(0,0,0,0.8); transform: scale(1.05); }
 
   #timeStatus {
-    position: absolute; top: 150px; left: 16px; z-index: 10;
+    position: absolute; top: 155px; left: 16px; z-index: 10;
     font-size: 12px; color: #fff; font-weight: bold;
     background: rgba(0,0,0,0.5); padding: 4px 8px; border-radius: 6px;
     backdrop-filter: blur(5px);
   }
+
+  #chatOverlay {
+    position: absolute; top: 60px; right: 16px; width: 250px;
+    display: flex; flex-direction: column; gap: 5px; pointer-events: none; z-index: 15;
+    align-items: flex-end;
+  }
+  .chat-popup {
+    background: rgba(0,0,0,0.6); color: white; padding: 8px 12px;
+    border-radius: 12px; font-size: 13px; max-width: 100%; word-wrap: break-word;
+    border-left: 3px solid #2ecc71; box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    animation: slideInRight 0.3s ease-out, fadeOut 0.5s 5s forwards;
+  }
+  .chat-popup b { color: #f5e6a3; }
+  @keyframes slideInRight { from { transform: translateX(50px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+  @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
 
   #pcHint {
     position: absolute; bottom: 100px; left: 50%; transform: translateX(-50%);
@@ -55,6 +73,14 @@
   }
   #walkBtn { bottom: 20px; left: 20px; background: #8e44ad; border-color: #9b59b6; }
   #walkBtn.active { background: #27ae60; border-color: #2ecc71; }
+  
+  /* Новая кнопка прыжка */
+  #jumpBtn { 
+    bottom: 160px; right: 90px; background: #e67e22; border-color: #f39c12; 
+    display: none; /* Появится только при ходьбе */
+  }
+  #jumpBtn:active { transform: scale(0.9); }
+
   #shopBtn { bottom: 90px; right: 20px; background: #2980b9; border-color: #3498db; }
   #chatBtn { bottom: 160px; right: 20px; background: #2c3e50; border-color: #34495e; }
   #adminBtn { bottom: 20px; right: 20px; background: #26262f; }
@@ -95,6 +121,11 @@
   .box h3 { margin-bottom: 15px; text-align: center; }
   .box button { width: 100%; padding: 12px; margin-bottom: 10px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; color: white; font-size: 15px; }
   .btn-buy { background: #27ae60; } .btn-close { background: #444; }
+
+  #onlineList { list-style: none; margin-bottom: 15px; max-height: 200px; overflow-y: auto; }
+  #onlineList li { padding: 8px; border-bottom: 1px solid #333; color: #ddd; font-size: 14px; }
+  #onlineList li:last-child { border-bottom: none; }
+  #onlineList li::before { content: '🟢'; margin-right: 8px; font-size: 10px; }
   
   #adminPanel {
     position: absolute; top: 0; right: -320px; width: 300px; height: 100%; background: #1e1e28; border-left: 1px solid #333; z-index: 30;
@@ -120,7 +151,9 @@
 </div>
 <div id="netStatus">🟢 Онлайн</div>
 <div id="timeStatus">☀️ День</div>
-<div id="pcHint">Управление: W A S D или Стрелки<br>Мышка — камера</div>
+<div id="pcHint">Управление: W A S D — идти<br>Пробел — прыжок, Мышка — камера</div>
+
+<div id="chatOverlay"></div>
 
 <div class="search">
   <span>🔍</span>
@@ -128,6 +161,7 @@
 </div>
 
 <button class="btn" id="walkBtn">🫈</button>
+<button class="btn" id="jumpBtn">🦘</button>
 <button class="btn" id="chatBtn">💬</button>
 <button class="btn" id="shopBtn">🛒</button>
 <button class="btn" id="adminBtn">⚙️</button>
@@ -141,6 +175,14 @@
   <div id="chatInputBox">
     <input type="text" id="chatInput" placeholder="Сообщение..." maxlength="50">
     <button onclick="sendChat()">➤</button>
+  </div>
+</div>
+
+<div class="modal" id="onlineModal">
+  <div class="box">
+    <h3>Игроки в сети</h3>
+    <ul id="onlineList"></ul>
+    <button class="btn-close" onclick="closeModal('onlineModal')">Закрыть</button>
   </div>
 </div>
 
@@ -208,6 +250,10 @@ let meteorShowerTimer = 0;
 let nextMeteorRealTime = getNextMidnight();
 let timeOfDay = parseFloat(localStorage.getItem('gameTime')) || 0.2; 
 
+// Переменные для прыжка
+let jumpVelocity = 0;
+const GRAVITY = 0.04;
+
 const otherPlayers = {};
 const otherPlayersTimeouts = {};
 
@@ -238,7 +284,6 @@ controls.enableDamping = true;
 controls.maxPolarAngle = Math.PI / 2.5; 
 controls.target.set(0, 0, 0);
 
-// --- СВЕТ ---
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
 scene.add(ambientLight);
 const sunLight = new THREE.DirectionalLight(0xfffbda, 1.2);
@@ -253,7 +298,6 @@ scene.add(sunMesh);
 const moonMesh = new THREE.Mesh(new THREE.SphereGeometry(15, 16, 16), new THREE.MeshBasicMaterial({ color: 0xccccff })); 
 scene.add(moonMesh);
 
-// --- ОБЛАКА ---
 const cloudsGroup = new THREE.Group();
 const cloudMat = new THREE.MeshLambertMaterial({color: 0xffffff, transparent: true, opacity: 0.9});
 for(let i=0; i<15; i++){
@@ -274,7 +318,6 @@ let housesData = [];
 let isAdmin = false;
 const lamps = []; 
 
-// --- ТЕКСТУРА СВЕЧЕНИЯ ---
 function getGlowTexture() {
   const canvas = document.createElement('canvas');
   canvas.width = 64; canvas.height = 64;
@@ -289,7 +332,6 @@ function getGlowTexture() {
 }
 const glowTexture = getGlowTexture();
 
-// --- КАРТА ---
 for (let x = 0; x < N; x++) {
   for (let z = 0; z < N; z++) {
     const grassColor = Math.random() > 0.5 ? 0x7CFC00 : 0x6ecf00;
@@ -362,7 +404,6 @@ for (let x = 0; x < N; x++) {
 }
 mapGroup.position.set(-N * SIZE / 2 + SIZE / 2, 0, -N * SIZE / 2 + SIZE / 2);
 
-// === ИГРОКИ ===
 function createPlayerModel(bodyColor) {
     const group = new THREE.Group();
     const pBody = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 5, 8), new THREE.MeshLambertMaterial({color: bodyColor}));
@@ -384,7 +425,6 @@ const playerGroup = createPlayerModel(0x3498db);
 playerGroup.visible = false;
 scene.add(playerGroup); 
 
-// --- ДОМА ---
 function createNametag(text, yPos = 12) {
   const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
   canvas.width = 256; canvas.height = 64;
@@ -401,7 +441,7 @@ function createHouseModel(skin, level) {
     const g = new THREE.Group();
     const windowMat = new THREE.MeshBasicMaterial({ color: 0xffeeaa }); 
     const doorMat = new THREE.MeshLambertMaterial({ color: 0x5c3a21 });
-    const extraHeight = (level - 1) * 3; // Каждый уровень добавляет 3 единицы высоты
+    const extraHeight = (level - 1) * 3;
 
     if (skin === 'pineapple') {
         const body = new THREE.Mesh(new THREE.SphereGeometry(4.5, 16, 16), new THREE.MeshLambertMaterial({ color: 0xffaa00 }));
@@ -457,38 +497,29 @@ function createHouseObj(h) {
   const houseGroup = new THREE.Group();
   houseGroup.position.set(h.x * SIZE, 0.5, h.z * SIZE);
   houseGroup.userData = h;
-  applyUpgradesToHouse(houseGroup); // Собираем дом внутри этой функции
+  applyUpgradesToHouse(houseGroup);
   return houseGroup;
 }
 
-// ИСПРАВЛЕННАЯ ФУНКЦИЯ СБОРКИ ДОМА
 function applyUpgradesToHouse(mesh) {
   const h = mesh.userData;
-  mesh.clear(); // Полностью очищаем группу от старых деталей
+  mesh.clear();
 
-  if (h.is_dead) { 
-    mesh.scale.set(0.1, 0.1, 0.1); 
-    return; 
-  }
-  
-  // Дом всегда стоит на земле
+  if (h.is_dead) { mesh.scale.set(0.1, 0.1, 0.1); return; }
   mesh.scale.set(1, 1, 1);
   mesh.position.y = 0.5;
 
-  // 1. Добавляем 3D модель дома
   const newModel = createHouseModel(h.skin || 'default', h.height_level || 1);
   newModel.userData.skin = h.skin;
   mesh.add(newModel);
 
-  // 2. Добавляем табличку с ником (поднимаем выше, если дом вырос)
   const tagY = 12 + (h.height_level - 1) * 3;
   mesh.add(createNametag(h.nickname, tagY));
 
-  // 3. Добавляем щит (если куплен)
   if (h.has_shield) {
-    const shieldRadius = 7 + (h.height_level-1)*1.5; // Щит растет вместе с домом
+    const shieldRadius = 7 + (h.height_level-1)*1.5;
     const shieldMesh = new THREE.Mesh(new THREE.SphereGeometry(shieldRadius, 16, 16), new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.3, wireframe: true }));
-    shieldMesh.position.y = shieldRadius * 0.6; // Центр сферы
+    shieldMesh.position.y = shieldRadius * 0.6;
     mesh.add(shieldMesh);
   }
 }
@@ -497,7 +528,7 @@ function syncHouseToScene(h) {
   const existing = housesGroup.children.find(m => m.userData.nickname === h.nickname);
   if (existing) {
     existing.userData = h;
-    applyUpgradesToHouse(existing); // Пересобираем
+    applyUpgradesToHouse(existing);
     const idx = housesData.findIndex(d => d.nickname === h.nickname);
     if(idx !== -1) housesData[idx] = h;
   } else {
@@ -545,8 +576,18 @@ chatChannel
       div.innerHTML = `<b>${data.nick}:</b> ${data.text}`;
       chatBox.appendChild(div);
       chatBox.scrollTop = chatBox.scrollHeight;
+      showChatPopup(data.nick, data.text);
   })
   .subscribe();
+
+function showChatPopup(nick, text) {
+  const overlay = document.getElementById('chatOverlay');
+  const popup = document.createElement('div');
+  popup.className = 'chat-popup';
+  popup.innerHTML = `<b>${nick}:</b> ${text}`;
+  overlay.appendChild(popup);
+  setTimeout(() => { popup.remove(); }, 5500);
+}
 
 window.sendChat = () => {
   const input = document.getElementById('chatInput');
@@ -561,6 +602,7 @@ window.sendChat = () => {
   div.innerHTML = `<b>${myHouseNick}:</b> ${text}`;
   chatBox.appendChild(div);
   chatBox.scrollTop = chatBox.scrollHeight;
+  showChatPopup(myHouseNick, text);
   
   input.value = '';
 };
@@ -619,12 +661,56 @@ db.channel('meteors')
   .on('broadcast', { event: 'shower' }, payload => { if (!isMeteorShower) triggerMeteorShower(true); })
   .subscribe();
 
+// === ОНЛАЙН СПИСОК (PRESENCE) ===
+let onlineChannel = null;
+
+function initPresence() {
+    if(onlineChannel) db.removeChannel(onlineChannel);
+    
+    onlineChannel = db.channel('online_users', {
+        config: { presence: { key: myHouseNick } }
+    });
+
+    onlineChannel
+        .on('presence', { event: 'sync' }, () => {
+            const state = onlineChannel.presenceState();
+            const list = document.getElementById('onlineList');
+            list.innerHTML = '';
+            
+            const users = Object.keys(state);
+            users.forEach(user => {
+                const li = document.createElement('li');
+                li.innerText = user + (user === myHouseNick ? ' (Вы)' : '');
+                list.appendChild(li);
+            });
+            
+            document.getElementById('netStatus').innerText = `🟢 Онлайн (${users.length})`;
+        })
+        .subscribe(async (status) => {
+            if (status === 'SUBSCRIBED') {
+                await onlineChannel.track({ online_at: new Date().toISOString() });
+            }
+        });
+}
+
+document.getElementById('netStatus').onclick = () => {
+    document.getElementById('onlineModal').classList.add('show');
+};
+
 // === УПРАВЛЕНИЕ ===
 let isWalking = false, moveForward = 0, moveRight = 0;
 const dpad = document.getElementById('dpad'), walkBtn = document.getElementById('walkBtn');
 const pcHint = document.getElementById('pcHint');
+const jumpBtn = document.getElementById('jumpBtn');
 
 const keys = { w: false, a: false, s: false, d: false, up: false, down: false, left: false, right: false };
+
+// Функция прыжка
+function doJump() {
+    if (isWalking && playerGroup.position.y <= 0.1) {
+        jumpVelocity = 0.8; // Сила прыжка
+    }
+}
 
 window.addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase();
@@ -632,7 +718,14 @@ window.addEventListener('keydown', (e) => {
   if (k === 'a' || k === 'ф' || k === 'arrowleft') { keys.a = true; keys.left = true; }
   if (k === 's' || k === 'ы' || k === 'arrowdown') { keys.s = true; keys.down = true; }
   if (k === 'd' || k === 'в' || k === 'arrowright') { keys.d = true; keys.right = true; }
-  if (isWalking && ['w','a','s','d','ц','ф','ы','в','arrowup','arrowdown','arrowleft','arrowright'].includes(k)) e.preventDefault();
+  
+  // Прыжок на пробел
+  if (k === ' ' || k === 'space') {
+      e.preventDefault();
+      doJump();
+  }
+
+  if (isWalking && ['w','a','s','d','ц','ф','ы','в','arrowup','arrowdown','arrowleft','arrowright', ' '].includes(k)) e.preventDefault();
 });
 
 window.addEventListener('keyup', (e) => {
@@ -642,6 +735,8 @@ window.addEventListener('keyup', (e) => {
   if (k === 's' || k === 'ы' || k === 'arrowdown') { keys.s = false; keys.down = false; }
   if (k === 'd' || k === 'в' || k === 'arrowright') { keys.d = false; keys.right = false; }
 });
+
+jumpBtn.onclick = doJump;
 
 walkBtn.onclick = () => {
   isWalking = !isWalking; walkBtn.classList.toggle('active', isWalking);
@@ -660,6 +755,7 @@ walkBtn.onclick = () => {
     controls.target.set(playerGroup.position.x, 5, playerGroup.position.z);
     camera.position.set(playerGroup.position.x, 60, playerGroup.position.z + 50); 
     dpad.classList.add('show');
+    jumpBtn.style.display = 'flex'; // Показываем кнопку прыжка
     pcHint.style.display = 'block';
     setTimeout(() => pcHint.style.display = 'none', 5000);
   } else {
@@ -667,6 +763,7 @@ walkBtn.onclick = () => {
     controls.minDistance = 40; controls.maxDistance = 350;
     controls.target.set(0, 0, 0); camera.position.set(120, 150, 120);
     dpad.classList.remove('show'); moveForward = 0; moveRight = 0;
+    jumpBtn.style.display = 'none'; // Прячем кнопку прыжка
     pcHint.style.display = 'none';
     gameChannel.send({ type: 'broadcast', event: 'player_leave', payload: { nickname: myHouseNick } });
   }
@@ -718,17 +815,35 @@ function animate() {
   if (keys.d || keys.right) r = 1;
   if (keys.a || keys.left) r = -1;
 
+  // Движение по горизонтали (X, Z)
   if (isWalking && (f !== 0 || r !== 0)) {
     const moveSpeed = 0.6;
     const forward = new THREE.Vector3(); camera.getWorldDirection(forward); forward.y = 0; forward.normalize();
     const right = new THREE.Vector3(); right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
     const moveDelta = new THREE.Vector3().addScaledVector(forward, f * moveSpeed).addScaledVector(right, r * moveSpeed);
     
-    playerGroup.position.add(moveDelta);
+    playerGroup.position.x += moveDelta.x;
+    playerGroup.position.z += moveDelta.z;
+    
     if (moveDelta.length() > 0) playerGroup.rotation.y = Math.atan2(moveDelta.x, moveDelta.z);
     
-    controls.target.add(moveDelta);
-    camera.position.add(moveDelta); 
+    controls.target.x += moveDelta.x;
+    controls.target.z += moveDelta.z;
+    camera.position.x += moveDelta.x; 
+    camera.position.z += moveDelta.z; 
+  }
+
+  // Физика прыжка (Y)
+  if (isWalking) {
+      if (jumpVelocity !== 0 || playerGroup.position.y > 0) {
+          jumpVelocity -= GRAVITY; // Гравитация тянет вниз
+          playerGroup.position.y += jumpVelocity; // Меняем высоту
+          
+          if (playerGroup.position.y <= 0) {
+              playerGroup.position.y = 0; // Приземлились
+              jumpVelocity = 0;
+          }
+      }
   }
 
   if (isWalking && myHouseNick) {
@@ -940,6 +1055,7 @@ setTimeout(() => {
     if (name) { localStorage.setItem('myHouseNick', name.replace(/^@/, '')); myHouseNick = name.replace(/^@/, ''); }
   }
   updateUI(); loadHouses();
+  if(myHouseNick) initPresence(); 
 }, 1000);
 
 document.getElementById('searchInput').addEventListener('keypress', function (e) {
